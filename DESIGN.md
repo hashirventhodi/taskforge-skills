@@ -449,3 +449,43 @@ Two decisions worth recording:
   `reblocked` on reopen). Terminal dependents are untouched (terminal wins in
   readiness) — a finished task does not un-finish because an upstream task
   reopened.
+
+### v0.2.x — circuit-breaker authority is over routing, not declared work
+
+**Fixes the silent data-loss bug found in the v0.2.0 architecture review
+(T1-1).** When an artifact tripped a circuit breaker (version breaker or
+review budget) mid-apply, `apply_result` parked the task and then skipped the
+result's `generated_tasks`, `edges`, **and** `signal` in one guard — while
+still recording `result_id`. The follow-up tasks and edges were silently
+dropped and made unrecoverable by the idempotency no-op. In the realistic
+case (Run records an out-of-scope follow-up in the same result as a review
+that exhausts the budget), the out-of-scope discovery vanished — directly
+violating the scope-discipline rule that such findings must never be lost.
+
+The root cause was a conflation: the guard suppressed three unlike things
+together. The breaker's authority is over **routing** — it exists to overrule
+a skill's `done`/`escalate` when the engine has decided iteration isn't
+converging. It has no authority over the skill's **declared work**: generated
+tasks and edges are durable facts discovered during execution, independent of
+whether this task may keep iterating, and they stay coherent on a parked task
+(a generated prerequisite's `blocked_by` edge is ignored by readiness while
+parked and honored on unpark). So the fix suppresses the **signal only**;
+tasks and edges always apply. The result is therefore still *fully* applied,
+so `result_id` is recorded and a retry no-ops cleanly.
+
+Recorded as a first-class invariant in CONTRACTS ("Circuit-breaker
+authority"), not merely an implementation detail: *a breaker may override
+where a task goes; it may never make declared work disappear.*
+
+Two honesty refinements landed with it: an engine override of a requested
+signal is recorded as a `signal_overridden` event (the history must answer
+what the skill requested, what the engine did, and why), and `apply_result`
+returns the authoritative signal (`none` when suppressed) rather than the
+intent, so the engine's own output never contradicts the task's status.
+
+**Rejected alternative:** withholding `result_id` on a mid-artifact park so a
+re-apply could "finish" the dropped work. There is no per-section
+idempotency, so re-applying the same result would add a *duplicate* artifact
+version, re-trip the breaker, and loop — and it would introduce
+partial-application state the engine has deliberately avoided. Option A
+(above) keeps every apply atomic, durable, and idempotent.

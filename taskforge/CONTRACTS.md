@@ -187,6 +187,19 @@ Signal semantics (engine-implemented; know what you trigger):
 The engine also enforces the review retry budget: implementation-fault
 rejections beyond `max_review_retries` park the task automatically.
 
+**Circuit-breaker authority (invariant).** When a breaker parks the task —
+the version breaker (`max_artifact_versions`) or the review budget — it
+overrides the skill's **routing signal only**. Any `generated_tasks` and
+`edges` in the same result are **still applied**: they are durable work the
+skill discovered during execution (an out-of-scope follow-up, a relationship
+learned along the way), independent of whether *this* task may keep
+iterating, and a park never discards them. The overridden signal is recorded
+as a `signal_overridden` event and the result reports the authoritative
+signal (`none`), so the history shows what the skill requested and that the
+engine overruled it. The result is fully applied (its `result_id` is
+recorded); a retry is a clean no-op. A breaker may override where a task
+goes; it may never make declared work disappear.
+
 ## Generated tasks
 
 * `follow_up` — future work that must not block the current task. Backlog;

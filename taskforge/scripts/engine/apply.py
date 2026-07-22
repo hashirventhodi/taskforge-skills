@@ -4,6 +4,12 @@ Fixed order: idempotency check -> validation -> artifacts (versioning,
 supersession, cascades, engine-enforced budgets/breakers) -> generated
 tasks -> annotation edges -> signal -> readiness recompute -> persist ->
 wake tasks blocked by a closed task.
+
+Circuit-breaker authority (invariant): a park by the version breaker or the
+review budget overrides the skill's routing *signal* only. Generated tasks
+and edges are durable declared work and are applied regardless of a park —
+the engine never discards them. The result is still fully applied, so
+result_id is recorded and a retry is a clean no-op.
 """
 from engine import store
 from engine.model import (CLOSED, KINDS, TERMINAL, TaskforgeError, active,
@@ -34,26 +40,46 @@ def apply_result(task, result, actor):
         if task["status"] == "blocked_on_human":
             break  # circuit breaker or budget enforcement tripped
 
-    if task["status"] != "blocked_on_human":
-        for spec in result.get("generated_tasks", []):
-            generated_ids.append(materialize(task, spec, actor))
-        for edge in result.get("edges", []):
-            add_edge(task, edge, actor)
-        apply_signal(task, result.get("signal", "none"),
+    # Generated tasks and annotation edges are durable work the skill
+    # declared during execution; they do not depend on whether THIS task may
+    # keep iterating. A circuit-breaker park overrides routing, never declared
+    # work (CONTRACTS: "Circuit-breaker authority"), so they are applied
+    # whether or not the artifact loop parked the task — and they stay
+    # coherent on a parked task (a generated prerequisite's blocked_by edge is
+    # ignored by readiness while parked, honored on unpark).
+    for spec in result.get("generated_tasks", []):
+        generated_ids.append(materialize(task, spec, actor))
+    for edge in result.get("edges", []):
+        add_edge(task, edge, actor)
+
+    # The signal is the skill's routing request; a breaker park is exactly the
+    # authority to override it. Suppression is recorded so the history shows
+    # what the skill asked for and that the engine overrode it, and the
+    # returned/​recorded signal is the authoritative one (none), not the intent.
+    requested_signal = result.get("signal", "none")
+    if task["status"] == "blocked_on_human":
+        applied_signal = "none"
+        if requested_signal != "none":
+            record(task, "signal_overridden", actor,
+                   reason="circuit-breaker park overrides the routing signal",
+                   detail={"requested": requested_signal})
+    else:
+        apply_signal(task, requested_signal,
                      result.get("signal_reason"), actor)
+        applied_signal = requested_signal
 
     if rid:
         task.setdefault("applied_results", []).append(rid)
     if result.get("notes"):
         record(task, "skill_completed", actor, reason=result["notes"],
-               detail={"signal": result.get("signal", "none")})
+               detail={"signal": applied_signal})
     refresh_status(task)
     store.save(task)
     if task["status"] in CLOSED:
         refresh_dependents(task["id"])
     return {"task": task["id"], "applied": True,
             "generated_tasks": generated_ids,
-            "signal": result.get("signal", "none"),
+            "signal": applied_signal,
             "status": task["status"], "readiness": evaluate(task),
             "warnings": warnings}
 

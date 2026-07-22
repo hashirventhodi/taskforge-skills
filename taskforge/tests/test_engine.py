@@ -572,6 +572,106 @@ class TestRetryAfterTerminal(Base):
         self.assertEqual(r2["duplicate_of"], "d1")
 
 
+class TestCircuitBreakerAuthority(Base):
+    """Invariant: a circuit-breaker park overrides the task's routing SIGNAL,
+    but never discards durable work the skill declared (generated tasks,
+    edges). The follow-up task, the annotation edge, the suppressed signal,
+    the recorded result_id, and retry idempotency are all *evidence* that the
+    invariant holds — the test targets the invariant, not the mechanism."""
+
+    def apply_that_parks(self, task):
+        """One result that trips the version breaker AND declares durable
+        work AND requests routing — the exact shape that lost data before."""
+        os.environ["TASKFORGE_MAX_VERSIONS"] = "1"  # first artifact parks
+        return self.apply(task, {
+            "result_id": "park-1",
+            "artifacts": [{"kind": "specification", "payload": spec_payload()}],
+            "generated_tasks": [{"title": "out-of-scope refactor",
+                                 "description": "found during work",
+                                 "relation": "follow_up", "reason": "scope"}],
+            "edges": [{"type": "relates_to", "target": self.other_id}],
+            "signal": "done", "signal_reason": "thought it was finished"},
+            "human")
+
+    def setUp(self):
+        super().setUp()
+        self.other_id = self.make("other")["id"]
+
+    def tearDown(self):
+        os.environ.pop("TASKFORGE_MAX_VERSIONS", None)
+        super().tearDown()
+
+    def test_park_never_discards_declared_work(self):
+        t = self.make("main")
+        r = self.apply_that_parks(t)
+        t = self.reload(t)
+
+        # The engine parked the task (its authority fired).
+        self.assertEqual(t["status"], "blocked_on_human")
+
+        # Evidence 1 — the generated task survived and is real.
+        self.assertEqual(len(r["generated_tasks"]), 1)
+        follow = tasks.load(r["generated_tasks"][0])
+        self.assertEqual(follow["title"], "out-of-scope refactor")
+
+        # Evidence 2 — the annotation edge survived on the parked task.
+        self.assertTrue(tasks.has_edge(t, "relates_to", self.other_id))
+
+        # Evidence 3 — routing was overridden: signal did NOT close the task,
+        # the return reports the authoritative signal, and it is recorded.
+        self.assertEqual(r["signal"], "none")
+        self.assertNotEqual(t["status"], "done")
+        overrides = [e for e in t["history"] if e["type"] == "signal_overridden"]
+        self.assertEqual(len(overrides), 1)
+        self.assertEqual(overrides[-1]["detail"]["requested"], "done")
+
+        # Evidence 4 — the result is fully applied (result_id recorded).
+        self.assertIn("park-1", t["applied_results"])
+
+    def test_retry_after_park_is_a_clean_noop(self):
+        t = self.make("main")
+        self.apply_that_parks(t)
+        t = self.reload(t)
+        specs_before = len(t["artifacts"]["specification"])
+        tasks_before = len(list(tasks.all_tasks()))
+
+        r2 = self.apply_that_parks(t)  # same result_id
+        t = self.reload(t)
+        self.assertFalse(r2["applied"])
+        self.assertEqual(r2.get("duplicate_of"), "park-1")
+        # No duplicate artifact version, no duplicate follow-up task.
+        self.assertEqual(len(t["artifacts"]["specification"]), specs_before)
+        self.assertEqual(len(list(tasks.all_tasks())), tasks_before)
+
+    def test_realistic_run_budget_park_keeps_out_of_scope_followup(self):
+        """The scenario from issue #1: run hits the review budget while
+        recording an out-of-scope follow-up in the same result."""
+        os.environ["TASKFORGE_MAX_REVIEW_RETRIES"] = "0"
+        try:
+            t = self.make("feature")
+            self.apply(t, {"artifacts": [
+                {"kind": "specification", "payload": spec_payload()}]}, "refine")
+            t = self.reload(t)
+            r = self.apply(t, {
+                "artifacts": [
+                    {"kind": "implementation", "payload": impl_payload()},
+                    {"kind": "review", "payload": review_payload(
+                        "rejected", "implementation", ["still broken"])}],
+                "generated_tasks": [{"title": "harden the parser",
+                                     "description": "noticed while implementing",
+                                     "relation": "follow_up", "reason": "scope"}],
+                "signal": "escalate_refine", "signal_reason": "spec unclear"},
+                "run")
+            t = self.reload(t)
+            self.assertEqual(t["status"], "blocked_on_human")  # budget park
+            self.assertEqual(len(r["generated_tasks"]), 1)     # follow-up kept
+            self.assertEqual(tasks.load(r["generated_tasks"][0])["title"],
+                             "harden the parser")
+            self.assertEqual(r["signal"], "none")              # escalate overridden
+        finally:
+            os.environ.pop("TASKFORGE_MAX_REVIEW_RETRIES", None)
+
+
 class TestReopen(Base):
     """Reopen restores a closed terminal (done/cancelled) to active work
     without losing artifacts, reviews, decisions, or history. Routing is

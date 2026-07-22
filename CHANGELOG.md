@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **Circuit-breaker park no longer discards declared work** (review finding
+  T1-1, [#1](https://github.com/hashirventhodi/taskforge-skills/issues/1)).
+  When an artifact tripped the version breaker or review budget mid-apply, the
+  result's `generated_tasks` and `edges` were silently dropped along with the
+  routing signal, yet `result_id` was recorded — so an out-of-scope follow-up
+  recorded in the same result as a budget-exhausting review vanished
+  unrecoverably. A breaker's authority is over **routing only**: the signal is
+  now the only thing suppressed on a park; generated tasks and edges always
+  apply. The override is recorded as a `signal_overridden` event and
+  `apply_result` returns the authoritative signal (`none`) rather than the
+  intent. Stated as a first-class invariant in CONTRACTS ("Circuit-breaker
+  authority").
+
 ## [0.2.0] - 2026-07-22
 
 Establishes the four-skill architecture and hardens the engine and tooling
