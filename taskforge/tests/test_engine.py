@@ -1592,6 +1592,30 @@ class TestSnapshot(Base):
         self.assertEqual(row["readiness_detail"]["blocking_ids"],
                          [blocker["id"]])
 
+    def test_park_attribution(self):
+        # A human_blocked event names WHO parked: the requesting skill for a
+        # signal park, the engine ("tasks.py") for enforcement parks. History
+        # must not misattribute — clients section the parked queue on it.
+        # Teeth: dropping the actor pass-through in apply_signal makes the
+        # refine park record "tasks.py" and this fails.
+        t = self.make()
+        self.apply(t, {"signal": "block_on_human",
+                       "signal_reason": "q"}, "refine")
+        ev = [e for e in self.reload(t)["history"]
+              if e["type"] == "human_blocked"][-1]
+        self.assertEqual(ev["actor"], "refine")
+        # Engine enforcement park (version breaker) stays engine-attributed.
+        t2 = self.make("b")
+        for i in range(4):
+            t2 = self.reload(t2)
+            self.apply(t2, {"artifacts": [{
+                "kind": "specification",
+                "payload": spec_payload(f"v{i}")}]}, "refine")
+        ev2 = [e for e in self.reload(t2)["history"]
+               if e["type"] == "human_blocked"][-1]
+        self.assertEqual(ev2["actor"], "tasks.py")
+        self.assertEqual(ev2["detail"].get("enforced_by"), "engine")
+
     def test_snapshot_acquires_the_store_lock(self):
         # Atomicity teeth: while another session holds the lock, snapshot
         # must wait/fail, not read a possibly-torn store. Reverting the

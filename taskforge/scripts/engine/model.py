@@ -95,9 +95,12 @@ def parent_id(task):
                 None)
 
 
-def block_on_human(task, reason, detail):
+def block_on_human(task, reason, detail, actor="tasks.py"):
+    # actor = who parked: the requesting skill for a signal park, the engine
+    # ("tasks.py") for enforcement parks (budget, breaker, cycle). History
+    # must attribute the park correctly — clients section on it.
     task["status"] = "blocked_on_human"
-    record(task, "human_blocked", reason=reason, detail=detail)
+    record(task, "human_blocked", actor, reason=reason, detail=detail)
 
 
 def review_rejections_in_current_cycle(task) -> int:

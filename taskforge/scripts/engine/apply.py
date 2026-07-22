@@ -266,7 +266,7 @@ def apply_signal(task, signal, reason, actor):
             refresh_status(parent)
             store.save(parent)
     elif signal == "block_on_human":
-        block_on_human(task, reason or "", {})
+        block_on_human(task, reason or "", {}, actor)
 
 
 def refresh_dependents(blocker_id):
