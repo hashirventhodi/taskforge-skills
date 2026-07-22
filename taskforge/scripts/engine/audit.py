@@ -76,14 +76,27 @@ def doctor():
     findings = []
     ids = set()
     tasks_list = []
+    future = []
     for p in sorted(store.store_dir().glob("TASK-*.json")):
         try:
             t = json.loads(p.read_text(encoding="utf-8"))
             tasks_list.append(t)
-            ids.add(t["id"])
+            ids.add(t["id"])  # a future-schema task still exists (not dangling)
         except (json.JSONDecodeError, KeyError) as exc:
             findings.append(f"{p.name}: unreadable ({exc})")
+    # Future-schema tasks are reported but NOT structurally validated — this
+    # engine can't interpret data from a newer version (DESIGN §10.12). doctor
+    # is the ONE path that sees them (operational scans skip them).
     for t in tasks_list:
+        if store.is_future(t):
+            future.append(t)
+            findings.append(
+                f"{t['id']}: schema_version {t['schema_version']} is newer "
+                f"than this engine ({SCHEMA_VERSION}) — run a newer taskforge "
+                f"to operate on it; skipped by operational scans")
+    for t in tasks_list:
+        if t in future:
+            continue  # can't validate structure this engine doesn't understand
         for e in t["edges"]:
             if e["target"] not in ids:
                 findings.append(

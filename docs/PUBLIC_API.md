@@ -53,7 +53,7 @@ Only these keys are frozen. Each command may emit **additional** keys that are
 | Command | Frozen key(s) | Meaning |
 |---|---|---|
 | `readiness <id>` | `readiness` | the routing value (string, see vocabulary) |
-| `list` | each row: `id`, `readiness` | the backlog, one row per task |
+| `list` | each row: `id`, `readiness` | the backlog — one row per task the engine can operate on (future-schema tasks are excluded and surfaced by `doctor`; see directional compatibility, DESIGN §10.12) |
 | `budget <id>` | `next_review_version` | integer ≥ 1; the version the next reviewer prompt is recorded under |
 | `apply` (result) | `status`, `readiness`, `generated_tasks` | new status, routing value (string), and the ids of tasks created by the result |
 | `blocked-by <id>` | *(array)* | JSON array of task-id strings blocked by `<id>` |

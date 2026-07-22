@@ -76,12 +76,22 @@ def path_of(task_id: str) -> Path:
     return store_dir() / f"{task_id}.json"
 
 
+def is_future(task: dict) -> bool:
+    """True iff this task was written by a newer engine than this one.
+
+    Schema compatibility is DIRECTIONAL (DESIGN §10.12): an engine may read
+    and migrate OLDER data, but must never interpret, mutate, or route on
+    NEWER data. This is the single predicate that whole-store paths consult
+    to honor that rule."""
+    return task.get("schema_version", 1) > SCHEMA_VERSION
+
+
 def load(task_id: str) -> dict:
     p = path_of(task_id)
     if not p.exists():
         raise TaskforgeError(f"unknown task: {task_id}")
     task = json.loads(p.read_text(encoding="utf-8"))
-    if task.get("schema_version", 1) > SCHEMA_VERSION:
+    if is_future(task):
         raise TaskforgeError(
             f"{task_id} has schema_version {task['schema_version']} newer "
             f"than this script ({SCHEMA_VERSION}); upgrade taskforge")
@@ -115,8 +125,18 @@ def save(task: dict) -> None:
 
 
 def all_tasks():
+    """Every task this engine is capable of safely reasoning about.
+
+    Future-schema tasks (written by a newer engine) are skipped, not yielded:
+    operational scans — listing, routing, cross-task cascades, migration —
+    must never route on or mutate data this engine may not fully understand
+    (DESIGN §10.12, directional compatibility). Their existence is surfaced
+    only by `doctor`, which reads the raw store directly. This is a
+    store-level guarantee, so no caller has to remember the rule."""
     for p in sorted(store_dir().glob("TASK-*.json")):
-        yield json.loads(p.read_text(encoding="utf-8"))
+        task = json.loads(p.read_text(encoding="utf-8"))
+        if not is_future(task):
+            yield task
 
 
 class store_lock:

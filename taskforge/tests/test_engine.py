@@ -722,6 +722,127 @@ class TestPublicOutputContract(Base):
         # Non-frozen keys may exist; we neither require nor forbid them.
 
 
+class TestSchemaEvolution(Base):
+    """Directional compatibility (DESIGN §10.12): an engine reads/migrates
+    OLDER data but never interprets, mutates, or routes on NEWER data. The
+    load-bearing invariant is that a current engine never mutates the bytes
+    of a future-schema task; every other behavior follows from it."""
+
+    def write_future_task(self, task_id="TASK-future0001", schema=2,
+                          edges=None, status="needs_refine"):
+        t = {
+            "schema_version": schema, "id": task_id,
+            "title": "from the future",
+            "description": "written by a newer engine", "status": status,
+            "created_at": "2099-01-01T00:00:00+00:00",
+            "updated_at": "2099-01-01T00:00:00+00:00",
+            "source": {"type": "internal", "reference": None,
+                       "synced_at": None},
+            "edges": edges or [], "decision_ref": None,
+            "pending_escalation": None, "applied_results": [],
+            "artifacts": {k: [] for k in tasks.KINDS}, "history": [],
+            "unknown_v2_field": "the engine must not choke on or drop this",
+        }
+        p = Path(self.dir) / f"{task_id}.json"
+        p.write_text(json.dumps(t, indent=2, sort_keys=True))
+        return p
+
+    def cli_exit(self, argv):
+        import io
+        import contextlib
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as ctx:
+                tasks.main(argv)
+        return ctx.exception.code
+
+    # --- the load-bearing invariant ---------------------------------------
+
+    def test_current_engine_never_mutates_future_task_bytes(self):
+        # A future-schema task that is a DEPENDENT of a current task — the
+        # exact setup where a cross-task cascade (refresh_dependents) would,
+        # pre-fix, refresh_status + save it and rewrite it as v1.
+        blocker = self.make("blocker")
+        fp = self.write_future_task(edges=[{"type": "blocked_by",
+                                            "target": blocker["id"],
+                                            "created_at": tasks.now(),
+                                            "reason": None}])
+        before = fp.read_bytes()
+
+        # Close the blocker → triggers refresh_dependents over the whole store.
+        self.apply(blocker, {"signal": "done", "signal_reason": "x"}, "human")
+
+        self.assertEqual(fp.read_bytes(), before,
+                         "a current engine rewrote a future-schema task")
+
+    # --- single-task access fails closed ----------------------------------
+
+    def test_single_task_access_is_refused(self):
+        self.write_future_task()
+        with self.assertRaises(tasks.TaskforgeError):
+            tasks.load("TASK-future0001")
+        self.assertEqual(self.cli_exit(["show", "TASK-future0001"]), 1)
+        self.assertEqual(self.cli_exit(["readiness", "TASK-future0001"]), 1)
+
+    # --- store-wide scans skip future-schema tasks ------------------------
+
+    def test_all_tasks_skips_future(self):
+        self.make("current")
+        self.write_future_task()
+        ids = [t["id"] for t in tasks.all_tasks()]
+        self.assertNotIn("TASK-future0001", ids)
+
+    def test_list_and_blocked_by_exclude_future(self):
+        import io
+        import contextlib
+        cur = self.make("current")
+        self.write_future_task(edges=[{"type": "blocked_by",
+                                       "target": cur["id"],
+                                       "created_at": tasks.now(),
+                                       "reason": None}])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(["list"])
+        listed = [r["id"] for r in json.loads(buf.getvalue())]
+        self.assertNotIn("TASK-future0001", listed)
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(["blocked-by", cur["id"]])
+        self.assertNotIn("TASK-future0001", json.loads(buf.getvalue()))
+
+    def test_current_task_blocked_by_future_routes_to_waiting(self):
+        self.write_future_task(task_id="TASK-future0001")
+        y = self.make("dependent")
+        self.apply(y, {"edges": [{"type": "blocked_by",
+                                  "target": "TASK-future0001"}]}, "human")
+        y = self.reload(y)
+        # find() → load() raises → None → blocker unresolved → waiting.
+        self.assertEqual(tasks.evaluate(y)["readiness"], "waiting")
+
+    # --- diagnostics report; migrate leaves future alone ------------------
+
+    def test_doctor_reports_future_without_mutating(self):
+        fp = self.write_future_task()
+        before = fp.read_bytes()
+        result = tasks.doctor()
+        self.assertFalse(result["clean"])
+        self.assertTrue(any("newer than this engine" in f
+                            for f in result["findings"]))
+        self.assertEqual(fp.read_bytes(), before)  # diagnostics never mutate
+
+    def test_migrate_leaves_future_task_untouched(self):
+        fp = self.write_future_task()
+        before = fp.read_bytes()
+        result = tasks.migrate()
+        self.assertNotIn("TASK-future0001", result["migrated"])
+        self.assertEqual(fp.read_bytes(), before)
+
+    def test_is_future_predicate(self):
+        self.assertTrue(store.is_future({"schema_version": 2}))
+        self.assertFalse(store.is_future({"schema_version": 1}))
+        self.assertFalse(store.is_future({}))  # defaults to 1
+
+
 class TestStoreLock(Base):
     """The lock's stale-break is mutually exclusive and self-verifying: a
     lock is removed only while a session holds exclusive break-rights AND

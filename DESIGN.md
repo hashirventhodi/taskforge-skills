@@ -324,6 +324,15 @@ live in exactly one function; new terminal-sync targets are prose additions
 to `references/sync.md`; a future orchestrator drives `list --readiness` +
 skill invocations with zero skill changes.
 
+**Schema evolution.** `schema_version` + `migrate` let a newer engine upgrade
+older stores; directional compatibility (§10.12) governs the reverse. When the
+first real (field-rewriting) migration lands, it **must append a `migrated`
+event via `record()`**, not a bare `store.save()`, so a task's own history
+shows that its shape changed — the same "every state change is a recorded
+event" rule the rest of the engine follows. The mechanism is deferred until
+that first migration exists (v1's `migrate` is a no-op bump); the invariant is
+stated here so it lands with the migration rather than being retrofitted.
+
 Non-goals, restated so future extension doesn't drift: no daemon, no queue,
 no GitHub/Jira code, no auto-execution of generated tasks.
 
@@ -575,3 +584,55 @@ the same pattern as command-table↔engine and license↔validator. `CONTRACTS.m
 was deliberately left lean: it answers "how does the engine behave"
 (skill-runtime); `PUBLIC_API.md` answers "what won't we break" (maintainers +
 tooling) — different audiences, different documents.
+
+### v0.2.x — §10.12 directional schema compatibility (T2-4)
+
+**Closes the last v0.2.0-review blocker: how an engine behaves when it meets
+data from a newer version of itself.** The `schema_version` guard existed on
+the single-task `load()` path but not on the whole-store scan (`all_tasks`),
+so `list`/`blocked-by` could misroute on a newer task and — the real hazard —
+the cross-task cascades (`refresh_dependents`, `flag_stale_decision_refs`)
+could `refresh_status` + `save` a newer-schema *dependent*, silently rewriting
+it as if it were old. In the git-tracked cross-machine store the design
+supports (§10.10), an older machine could corrupt a newer machine's tasks.
+
+The rule, stated once:
+
+> **Schema compatibility is directional.** An engine may safely read and
+> migrate data from older schema versions. It must never interpret, mutate,
+> or route on data from newer schema versions. Future-schema tasks are
+> therefore invisible to operational scans and visible only to diagnostics
+> until an appropriate engine version is used.
+
+Everything follows from that one rule, which is why the design collapses to
+three interaction categories, each with one policy point:
+
+* **Single-task access** (`load`) — fail closed with an actionable upgrade
+  error. Report-by-refusal; never mutates. `find()` already downgrades the
+  refusal to `None`, so a current task blocked by a future one routes to
+  `waiting` (can't confirm the blocker resolved → stay blocked).
+* **Store-wide scans** (`all_tasks`) — skip future-schema tasks. This is a
+  *store-level* guarantee, not a caller convention: `all_tasks()` now yields
+  "every task this engine can safely reason about", so listing, routing,
+  cross-task cascades, and migration all inherit the rule and no future scan
+  author has to remember it. The single predicate is `store.is_future`.
+* **Whole-store diagnostics** (`doctor`) — read the raw store, report each
+  future-schema task as a finding (never mutate), and skip structural
+  validation of data this engine can't interpret. `doctor` is the one place
+  their existence surfaces; `list` deliberately stays an operational view of
+  what the engine can act on (keeping the frozen `readiness` vocabulary clean
+  — see §10 T2-3).
+
+The load-bearing test is not "doctor prints a finding" but *a current engine
+never mutates the bytes of a future-schema task*; every other behavior
+follows from that invariant holding. The migration-event mechanism (§9) is
+deferred until a real migration needs it — machinery built before its first
+use is machinery built wrong.
+
+This completes the four architectural-hardening invariants the v0.2.0 review
+set out: **#1 durability** (a breaker overrides routing, never discards
+declared work), **#2 concurrency** (only one session may attempt stale
+recovery, and only after re-confirming), **#3 compatibility** (the public
+surface is the CLI; internal structure is free to change), and **#4
+evolution** (an engine never mutates or routes on data from a newer version
+of itself).

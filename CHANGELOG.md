@@ -28,6 +28,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from the dedicated `readiness <id>` command.
 
 ### Fixed
+- **Directional schema compatibility** (review finding T2-4,
+  [#4](https://github.com/hashirventhodi/taskforge-skills/issues/4)). The
+  `schema_version` guard covered single-task `load()` but not the whole-store
+  scan, so an older engine could misroute on — or, via a cross-task cascade,
+  silently rewrite — a *newer*-schema task (real corruption in a shared
+  store). The rule is now uniform: an engine reads/migrates older data but
+  never interprets, mutates, or routes on newer data. `all_tasks()` skips
+  future-schema tasks (so listing, routing, cascades, and migration all
+  inherit the rule from one place), single-task access fails closed with an
+  upgrade error, and `doctor` reports future-schema tasks as a finding without
+  mutating them. `list` shows only what the engine can operate on; `doctor`
+  surfaces the skew.
 - **Stale-lock recovery is race-free** (review finding T1-2,
   [#2](https://github.com/hashirventhodi/taskforge-skills/issues/2)). Breaking
   a stale store lock left by a crashed session read the timestamp then
