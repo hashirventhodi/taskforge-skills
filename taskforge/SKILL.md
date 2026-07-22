@@ -65,7 +65,7 @@ When the user answers a `blocked_on_human` task or amends a parked one:
 ```bash
 # The note quotes the human — write it to a file with your editor tool and
 # pass the path (CONTRACTS.md → "Untrusted text is data"):
-python3 $SCRIPT human-update TASK-x --note-file /tmp/note.txt [result.json]
+python3 $SCRIPT human-update TASK-x --note-file /tmp/note.txt [--result /tmp/result.json]
 ```
 
 Attach a result.json only if the answer translates into artifacts (e.g. the
@@ -90,7 +90,7 @@ note only · ignore**. Write the chosen children (`relation: child`) and any
 promoted findings (`relation: follow_up`) into a `result.json`:
 
 ```bash
-python3 $SCRIPT human-update TASK-x --note-file /tmp/approval.txt result.json
+python3 $SCRIPT human-update TASK-x --note-file /tmp/approval.txt --result result.json
 ```
 
 The engine wires the children, pins each to explore's Decision, and re-routes

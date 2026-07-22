@@ -1455,7 +1455,7 @@ class TestExploreDisposition(Base):
         t = self.parked_with_decision()
         nf = self.write("n.txt", "close it — decided no")
         rf = self.write("r.json", json.dumps({"signal": "done"}))
-        self.cli(["human-update", t["id"], "--note-file", nf, rf])
+        self.cli(["human-update", t["id"], "--note-file", nf, "--result", rf])
         t = self.reload(t)
         # A decided-not-to-build research task is a first-class `done` with a
         # recorded Decision — the human's review-gate exemption, not a cancel.
@@ -1473,7 +1473,7 @@ class TestExploreDisposition(Base):
                                  "relation": "follow_up",
                                  "reason": "from the research decision"}],
             "signal": "done"}))
-        self.cli(["human-update", t["id"], "--note-file", nf, rf])
+        self.cli(["human-update", t["id"], "--note-file", nf, "--result", rf])
         t = self.reload(t)
         self.assertEqual(t["status"], "done")
         spawned = [x for x in store.all_tasks() if x["id"] != t["id"]]

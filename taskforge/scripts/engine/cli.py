@@ -96,9 +96,15 @@ def build_parser():
 
     h = sub.add_parser("human-update")
     h.add_argument("id")
-    h.add_argument("result_json", nargs="?")
     h.add_argument("--note")
     h.add_argument("--note-file")
+    # A flag, not a trailing positional: an optional positional after the
+    # value-taking --note-file is rejected by argparse before Python 3.13
+    # ("unrecognized arguments"). A flag makes argument order irrelevant and
+    # matches the --note-file/--reason-file file-input family.
+    h.add_argument("--result", metavar="RESULT_JSON",
+                   help="optional result.json to apply as the human "
+                        "(e.g. an approved decomposition, or a signal)")
 
     x = sub.add_parser("cancel")
     x.add_argument("id")
@@ -203,9 +209,9 @@ def run_command(args):
             if t["status"] == "blocked_on_human":
                 t["status"] = "new"
             record(t, "human_updated", "human", reason=note)
-            if args.result_json:
+            if args.result:
                 result = json.loads(
-                    Path(args.result_json).read_text(encoding="utf-8"))
+                    Path(args.result).read_text(encoding="utf-8"))
                 out(apply_mod.apply_result(t, result, actor="human"))
             else:
                 readiness.refresh_status(t)
