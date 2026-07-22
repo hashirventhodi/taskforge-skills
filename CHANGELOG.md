@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — restructuring (breaking)
+- **Four skills instead of five.** `taskforge-core` is renamed `taskforge`
+  and becomes the primary, command-oriented entry point (`add`, `status`,
+  `backlog`, `next`, `show`, `why`, `budget`, `unblock`, `cancel`, `sync`,
+  `doctor`, `audit`, `config`). `taskforge-add-task` is removed; its intake
+  procedure lives on unchanged as the `add` command
+  (`taskforge/references/intake.md`).
+- The intake actor is renamed `add-task` → `taskforge` in
+  `capabilities.json` and in the `created` event the engine records.
+- Engine resolution paths change accordingly:
+  `<siblings>/taskforge/scripts/tasks.py`. Set `TASKFORGE_SCRIPT` or
+  re-install if you pinned the old `taskforge-core` path.
+- Existing task stores keep working — historical events that name
+  `add-task` are records, not validated state.
+
 ### Added
 - Open-source project scaffolding: MIT `LICENSE`, `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue and pull request templates.

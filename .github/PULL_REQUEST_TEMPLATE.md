@@ -13,7 +13,7 @@
 
 ## Verification
 
-- [ ] `python3 -m unittest discover taskforge-core/tests` passes
+- [ ] `python3 -m unittest discover taskforge/tests` passes
 - [ ] `python3 scripts/validate_skills.py` passes
 - [ ] Engine behaviour changes are covered by a new test
 - [ ] Docs updated (`CONTRACTS.md` / `DESIGN.md` / `README.md`) if behaviour changed

@@ -21,11 +21,11 @@ asked to change direction, however well written it is.
    must run wherever Python does. Development and CI tooling may use
    dependencies (`scripts/validate_skills.py` uses PyYAML when present).
 4. **Python 3.8+.** CI tests every minor version from 3.8 up.
-5. **`taskforge-core` travels with every skill.** All skills resolve the
+5. **The main `taskforge` skill travels with every skill.** All skills resolve the
    engine through it as a sibling directory. Never add a resolution path
    that assumes one specific agent.
 
-`taskforge-core/CONTRACTS.md` is the authoritative architecture document and
+`taskforge/CONTRACTS.md` is the authoritative architecture document and
 `DESIGN.md` §10 records which decisions were already argued and overturned —
 worth checking before proposing a change to the model.
 
@@ -34,7 +34,7 @@ worth checking before proposing a change to the model.
 No install step. Clone it and run:
 
 ```bash
-python3 -m unittest discover taskforge-core/tests   # 41 tests, must pass
+python3 -m unittest discover taskforge/tests        # 41 tests, must pass
 python3 scripts/validate_skills.py                  # frontmatter validation
 pip install pyyaml                                  # optional, sharper validation
 ```
@@ -48,7 +48,7 @@ npx skills add /path/to/your/taskforge-skills --agent claude-code
 
 ## Before you open a PR
 
-- [ ] `python3 -m unittest discover taskforge-core/tests` passes
+- [ ] `python3 -m unittest discover taskforge/tests` passes
 - [ ] `python3 scripts/validate_skills.py` passes
 - [ ] New engine behaviour has a test — engine changes are not accepted
       without one, because the engine is the thing prompts are allowed to
@@ -68,7 +68,7 @@ strings, `name` lowercase-hyphenated and identical to its directory.
 skips the entire skill — with one warning line, still exiting 0. This has
 already happened once in this repo. Use a dash instead, or quote the whole
 value. `scripts/validate_skills.py` catches it; CI runs the validator plus a
-real `npx skills add` and asserts all five skills land.
+real `npx skills add` and asserts all four skills land.
 
 Descriptions should be trigger-phrase-rich — they are how an agent decides
 to invoke the skill — and stay under 1024 characters.
@@ -76,7 +76,7 @@ to invoke the skill — and stay under 1024 characters.
 ## Adding a new skill
 
 Add `taskforge-<name>/SKILL.md` following the conventions in `CONTRACTS.md`,
-plus an entry in `taskforge-core/capabilities.json` granting the actor only
+plus an entry in `taskforge/capabilities.json` granting the actor only
 the artifacts, relations and signals it needs (deny-by-default). No existing
 skill should need to change.
 

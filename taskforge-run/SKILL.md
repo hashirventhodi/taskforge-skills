@@ -9,7 +9,7 @@ Implement the active Specification, then submit the work to an independent
 reviewer in a fresh context. Run finishes a task or escalates it — it never
 quietly lowers the bar and never expands scope.
 
-**Prerequisites**: read `taskforge-core/CONTRACTS.md` this session; resolve
+**Prerequisites**: read `taskforge/CONTRACTS.md` this session; resolve
 `$SCRIPT`; guard on readiness (`run` required).
 
 ## 1. The spec is the whole contract
@@ -44,7 +44,7 @@ result — partial evidence is still evidence.
 
 ## 3. Independent review — recorded, isolated, non-negotiable
 
-Follow `taskforge-core/references/reviewer-prompt.md` **exactly**: fill the
+Follow `taskforge/references/reviewer-prompt.md` **exactly**: fill the
 three slots (spec verbatim, full diff, test results) and nothing else;
 `record-review-prompt` **before** spawning; fresh-context subagent (Task
 tool); one re-ask on malformed output, then `block_on_human` — never guess a
@@ -73,7 +73,7 @@ record).
 ## 5. Emit, apply, sync, report
 
 Fresh `result_id`; `validate` then `apply` with `--actor run`. Terminal +
-external source → sync per `taskforge-core/references/sync.md` (with its
+external source → sync per `taskforge/references/sync.md` (with its
 honesty rule). Report per `reporting.md`: attempts, verdicts, root causes,
 follow_ups, final readiness. No merging/deploying beyond the spec's own
 criteria; no starting generated tasks.

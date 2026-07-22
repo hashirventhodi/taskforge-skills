@@ -61,7 +61,7 @@ def ensure_config_file() -> None:
 
 def capabilities() -> dict:
     """actor -> {artifacts, relations, signals}. Deny-by-default for unknown
-    actors; 'human' is the universal actor. Ships with taskforge-core."""
+    actors; 'human' is the universal actor. Ships with taskforge."""
     p = Path(__file__).resolve().parents[2] / "capabilities.json"
     if not p.exists():
         raise TaskforgeError(f"capabilities.json not found at {p}")
@@ -83,7 +83,7 @@ def load(task_id: str) -> dict:
     if task.get("schema_version", 1) > SCHEMA_VERSION:
         raise TaskforgeError(
             f"{task_id} has schema_version {task['schema_version']} newer "
-            f"than this script ({SCHEMA_VERSION}); upgrade taskforge-core")
+            f"than this script ({SCHEMA_VERSION}); upgrade taskforge")
     return task
 
 

@@ -17,7 +17,7 @@ all of that for every future skill run.
 ## Locating the engine
 
 Resolution order — take the first that exists, set it as `$SCRIPT`. Every
-candidate ends in `taskforge-core/scripts/tasks.py`; only the prefix varies:
+candidate ends in `taskforge/scripts/tasks.py`; only the prefix varies:
 
 1. `$TASKFORGE_SCRIPT` (explicit override — always wins)
 2. `<this-skill's-parent-dir>/` — the sibling install. taskforge skills are
@@ -37,7 +37,7 @@ directory, substitute that directory for `.claude` in rules 4 and 6.
 The engine tolerates being reached through a symlink — `tasks.py` resolves
 its own real path before importing `engine/`.
 
-If none resolves: **stop** and tell the user taskforge-core is not installed
+If none resolves: **stop** and tell the user taskforge is not installed
 (`npx skills add hashirventhodi/taskforge-skills`). Never improvise task
 state without the engine.
 
@@ -114,7 +114,7 @@ explicit, confirmed user request), never inferred from absence.
 ## The result contract
 
 One `result.json` per skill execution. Start from the matching file in
-`taskforge-core/templates/` rather than free-composing JSON. Always include
+`taskforge/templates/` rather than free-composing JSON. Always include
 a fresh `result_id` (any unique string, e.g. a UUID) — it is the engine's
 double-apply protection.
 
@@ -178,6 +178,6 @@ orchestration request) decides what runs next.
 
 ## Ending a skill execution
 
-Follow `taskforge-core/references/reporting.md` for the report and, on
+Follow `taskforge/references/reporting.md` for the report and, on
 terminal transitions of externally-sourced tasks,
-`taskforge-core/references/sync.md` for sync-back.
+`taskforge/references/sync.md` for sync-back.

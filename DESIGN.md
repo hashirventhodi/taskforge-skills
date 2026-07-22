@@ -20,13 +20,15 @@ Governing principle, restated as the design test applied throughout:
 taskforge-skills/
 ├── README.md                          install, philosophy, operations
 ├── DESIGN.md                          this document
-├── taskforge-core/                    ◆ the shared SDK (itself a skill)
-│   ├── SKILL.md                       workflow overview + status/backlog queries
+├── taskforge/                         ◆ the primary entry point + shared SDK
+│   ├── SKILL.md                       command-oriented: intake, queries, routing,
+│   │                                  unblocking, maintenance
 │   ├── CONTRACTS.md                   the architecture every skill obeys
 │   ├── capabilities.json              ◆ actor → allowed artifacts/relations/signals
 │   ├── scripts/
 │   │   └── tasks.py                   the deterministic engine (stdlib-only)
 │   ├── references/
+│   │   ├── intake.md                  the `add` command's procedure
 │   │   ├── reviewer-prompt.md         ◆ reusable reviewer component (moved here)
 │   │   ├── reporting.md               shared end-of-skill report format
 │   │   └── sync.md                    terminal sync-back instructions
@@ -34,8 +36,7 @@ taskforge-skills/
 │   │   ├── refine-adopt.json … run-approved.json …
 │   └── tests/
 │       └── test_engine.py             stdlib unittest suite for tasks.py
-├── taskforge-add-task/SKILL.md        ◆ prefixed names throughout
-├── taskforge-refine/SKILL.md
+├── taskforge-refine/SKILL.md          ◆ prefixed names throughout
 ├── taskforge-explore/SKILL.md
 └── taskforge-run/SKILL.md
 ```
@@ -45,7 +46,7 @@ Decisions:
 * ◆ **All skills carry the `taskforge-` prefix.** Bare names (`run`,
   `explore`) will collide with other packages in a shared `.claude/skills/`
   directory; prefixing is free insurance for a years-long package.
-* ◆ **The shared SDK is itself a skill (`taskforge-core`).** Its SKILL.md
+* ◆ **The shared SDK is itself a skill (`taskforge`).** Its SKILL.md
   triggers on backlog/status queries ("what tasks are ready", "show the
   backlog", "task status") — real functionality, not a stub — and its
   presence makes the SDK visible to the same install/discovery mechanism as
@@ -211,7 +212,7 @@ with a fresh `result_id`; `validate` then `apply`; report per
 `references/reporting.md`; sync-back per `references/sync.md` when terminal;
 **stop** — never auto-execute generated tasks or chain skills unasked.
 
-| | taskforge-add-task | taskforge-refine | taskforge-explore | taskforge-run |
+| | taskforge (`add`) | taskforge-refine | taskforge-explore | taskforge-run |
 |---|---|---|---|---|
 | **Purpose** | normalize any source into a Task | universal entry: produce the Specification or route | produce a Decision; decompose when size demands | implement the spec; independent review; finish or escalate |
 | **Inputs** | source content (user text, issue via MCP/CLI, file) | task (description, decision_ref/decision, escalation history) | task (description, escalation reasons, superseded decisions, existing children, codebase) | task (active spec = whole contract), codebase |
@@ -231,7 +232,7 @@ prose realization of its column plus its unique judgment guidance.
 
 ## 6. The reviewer as a reusable component
 
-Lives in `taskforge-core/references/reviewer-prompt.md` because it is a
+Lives in `taskforge/references/reviewer-prompt.md` because it is a
 workflow asset, not a Run implementation detail.
 
 * **Input contract**: exactly three slots — Specification (active version,
@@ -265,7 +266,7 @@ workflow asset, not a Run implementation detail.
 
 Three layers, matching the two kinds of failure (mechanics vs judgment):
 
-1. **Unit tests of the engine** (`taskforge-core/tests/test_engine.py`,
+1. **Unit tests of the engine** (`taskforge/tests/test_engine.py`,
    stdlib `unittest` — the framework stays dependency-free even in tests;
    the module is imported directly, no subprocess). Coverage map:
    versioning + supersession-reason placement · cascade correctness
@@ -290,7 +291,7 @@ Three layers, matching the two kinds of failure (mechanics vs judgment):
    spot-checks now backed by `audit-review`. Run via `claude -p` per the
    skill-creator methodology when iterating on prompt text.
 
-CI story: `python3 -m unittest discover taskforge-core/tests` — zero
+CI story: `python3 -m unittest discover taskforge/tests` — zero
 dependencies, runs anywhere the script runs.
 
 ## 8. Documentation set
@@ -309,7 +310,7 @@ touching existing components:
 1. create `taskforge-<name>/SKILL.md` following the §5 common contract;
 2. add its actor entry to `capabilities.json` (data, not code — deny-by-default
    makes the matrix the single gate);
-3. optionally add templates under `taskforge-core/templates/`.
+3. optionally add templates under `taskforge/templates/`.
 
 Extension points designed in: annotation edge types are free-form today;
 new *relations* or *artifact kinds* are engine changes by design (they carry
@@ -328,7 +329,7 @@ Weaknesses found by adversarial pass over the v0 prototype + first draft:
 
 1. **Fragile shared-path coupling.** `../taskforge-shared` breaks under
    partial installs or path differences between project/user scopes.
-   → shared SDK became the `taskforge-core` *skill*; explicit resolution
+   → shared SDK became a *skill* (now `taskforge`); explicit resolution
    order; skills stop rather than improvise. (§1)
 2. **Skill-name collisions.** `run` is near-guaranteed to collide.
    → `taskforge-` prefix everywhere. (§1)
@@ -397,3 +398,21 @@ the registry).
 
 *Implementation follows this document. Any deviation discovered during
 implementation gets recorded here, not silently absorbed.*
+
+### v0.2 restructuring (recorded after release)
+
+**Intake merged into a command-oriented `taskforge` skill; `taskforge-core`
+renamed; `taskforge-add-task` removed.** Two forces drove it: intake is a
+procedure, not a judgment domain — it shares no artifact kinds with the
+workflow skills (its actor could emit only `follow_up` edges) and its
+"never editorialize" rule is a management concern, the same family as
+querying and unblocking; and the package needed one obvious front door.
+The main skill is now organized as a command table (`add`, `status`,
+`backlog`, `next`, `show`, `why`, `unblock`, `cancel`, `sync`, `doctor`,
+`audit`, `config`) with the intake procedure as a reference
+(`references/intake.md`) loaded only when `add` runs — the same progressive
+disclosure already used for the reviewer and sync-back. The single-writer
+engine, capability matrix (actor `add-task` → `taskforge`), and the three
+single-responsibility workflow skills are unchanged. Overturned from the
+initial design: "add-task is a separate skill" — separateness bought
+nothing once the entry point had to exist anyway.

@@ -105,7 +105,7 @@ def run_command(args):
         with store.store_lock():
             store.ensure_config_file()
             t = new_task(args.title, desc, args.source_type, args.source_ref)
-            record(t, "created", "add-task",
+            record(t, "created", "taskforge",
                    detail={"source": args.source_type,
                            "reference": args.source_ref})
             readiness.refresh_status(t)

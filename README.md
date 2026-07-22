@@ -16,16 +16,17 @@ review; where none exists the skill stops rather than recording a
 self-review.
 
 ```
-taskforge-core/        shared SDK + status/backlog skill
+taskforge/             the primary entry point + shared SDK
+  SKILL.md             command-oriented: add · status · backlog · next · show ·
+                       why · unblock · cancel · sync · doctor · audit · config
   CONTRACTS.md         the architecture (single source, read once per session)
   capabilities.json    actor → allowed artifacts/relations/signals (deny-by-default)
   scripts/tasks.py     engine entry point + stable API facade (stdlib-only)
   scripts/engine/      the engine: model · store · readiness · validation ·
                        apply · audit · cli — one writer, decomposed by concern
-  references/          reviewer component · reporting · sync-back
+  references/          intake procedure · reviewer component · reporting · sync-back
   templates/           result.json skeletons per skill/mode
   tests/               41-test stdlib unittest suite for the engine
-taskforge-add-task/    intake: any source → normalized Task
 taskforge-refine/      universal entry: adopt | elaborate | clarify | escalate
 taskforge-explore/     Decisions; decomposition into children
 taskforge-run/         implement + recorded, auditable fresh-context review
@@ -42,13 +43,13 @@ npx skills add hashirventhodi/taskforge-skills          # this project
 npx skills add hashirventhodi/taskforge-skills --global # all projects
 ```
 
-Install **all five** skills (the default). Or copy the five directories into
+Install **all four** skills (the default). Or copy the four directories into
 your agent's skills directory by hand — `.claude/skills/` (project),
 `~/.claude/skills/` (user), or the CLI's canonical `.agents/skills/`.
 
-**taskforge-core must travel with the others** — every skill resolves the
-engine through it, as a sibling directory (resolution order in
-`taskforge-core/CONTRACTS.md`; `TASKFORGE_SCRIPT` overrides). Requires
+**The `taskforge` skill must travel with the others** — every skill resolves
+the engine through it, as a sibling directory (resolution order in
+`taskforge/CONTRACTS.md`; `TASKFORGE_SCRIPT` overrides). Requires
 Python 3.8+; no dependencies, tests included.
 
 Task state lives in `.tasks/` (one JSON per task). The store is
@@ -73,10 +74,10 @@ but is never its enforcement.
 ## Verifying the framework
 
 ```bash
-python3 -m unittest discover taskforge-core/tests    # engine correctness
+python3 -m unittest discover taskforge/tests         # engine correctness
 python3 scripts/validate_skills.py                   # SKILL.md frontmatter
-python3 taskforge-core/scripts/tasks.py doctor       # store integrity
-python3 taskforge-core/scripts/tasks.py audit-review TASK-x   # reviewer isolation
+python3 taskforge/scripts/tasks.py doctor            # store integrity
+python3 taskforge/scripts/tasks.py audit-review TASK-x        # reviewer isolation
 ```
 
 Reviewer isolation is *recorded and audited*, not just instructed: run

@@ -1,0 +1,9 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "edges": [{
+    "type": "blocked_by",
+    "target": "TASK-ONLY-IF-THE-SOURCE-STATES-IT",
+    "reason": "quote the source statement, e.g. 'blocked by #41'"
+  }],
+  "notes": "intake: wired relationships stated explicitly by the source"
+}

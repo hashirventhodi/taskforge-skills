@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-**taskforge is an Agent Skills framework that implements an AI engineering workflow.** It is not an application, daemon, or orchestrator. It is a set of five skills plus a deterministic engine that can be dropped into any repository, under which every piece of engineering work becomes a durable **Task** that moves through the workflow by **derived readiness** rather than by a controller.
+**taskforge is an Agent Skills framework that implements an AI engineering workflow.** It is not an application, daemon, or orchestrator. It is a set of four skills plus a deterministic engine that can be dropped into any repository, under which every piece of engineering work becomes a durable **Task** that moves through the workflow by **derived readiness** rather than by a controller.
 
 **The problem it solves.** LLM-driven engineering fails in characteristic ways: work evaporates when a session ends; scope silently expands mid-implementation; specifications get invented, inflated, or ignored; the same model that wrote the code grades the code; and state transitions (versioning, invalidation, blocking) get "remembered" inconsistently by a probabilistic system. taskforge makes work durable, scope-disciplined, independently reviewed, and mechanically consistent.
 
@@ -18,7 +18,7 @@
 
 **Why the architecture looks the way it does.** Skills (prompts) hold judgment: is this task executable? what approach? does this diff satisfy the spec? The engine (a stdlib-only Python package behind a stable `tasks.py` facade) is the **only writer of task state**: skills emit a `result.json`, and the engine validates and applies it — versioning artifacts, superseding predecessors, running invalidation cascades, wiring typed relationships, deriving readiness, enforcing capabilities and budgets, recording events. There is no orchestrator: readiness is computed from each task's own state, every skill guards on it before acting and stops after reporting, so the workflow composes without a controller and a future orchestration layer could drive it without changing any skill.
 
-The four workflow skills: **add-task** (normalize any source into a Task with a verbatim, immutable description), **refine** (the universal entry point — adopt / elaborate / clarify / escalate), **explore** (engineering Decisions, optional decomposition into children; reachable only by explicit escalation), **run** (implement against the active specification, then an independent fresh-context review whose prompt is recorded and mechanically auditable). A fifth skill, **taskforge-core**, is the shared SDK made visible to the install mechanism, and answers backlog/status/health queries.
+The workflow skills: **refine** (the universal entry point — adopt / elaborate / clarify / escalate), **explore** (engineering Decisions, optional decomposition into children; reachable only by explicit escalation), **run** (implement against the active specification, then an independent fresh-context review whose prompt is recorded and mechanically auditable). The main **taskforge** skill is the primary entry point — command-oriented intake (`add`, normalizing any source into a Task with a verbatim, immutable description), backlog/status/health queries, routing, and human unblocking — and the shared SDK made visible to the install mechanism.
 
 ---
 
@@ -29,9 +29,9 @@ The four workflow skills: **add-task** (normalize any source into a Task with a 
 | Area | State | Evidence |
 |---|---|---|
 | Design document | Complete, includes critique history | `DESIGN.md` (§10 records three review rounds, incl. overturned decisions) |
-| Engine | Complete | `taskforge-core/scripts/engine/` — 7 modules, ~1,050 lines, stdlib-only; `tasks.py` facade |
-| Engine test suite | **42/42 passing** | `taskforge-core/tests/test_engine.py`, stdlib unittest, no dependencies |
-| Skills (5 × SKILL.md) | Complete prompts + frontmatter | `taskforge-{core,add-task,refine,explore,run}/SKILL.md` |
+| Engine | Complete | `taskforge/scripts/engine/` — 7 modules, ~1,050 lines, stdlib-only; `tasks.py` facade |
+| Engine test suite | **41/41 passing** | `taskforge/tests/test_engine.py`, stdlib unittest, no dependencies |
+| Skills (4 × SKILL.md) | Complete prompts + frontmatter | `taskforge/SKILL.md` + `taskforge-{refine,explore,run}/SKILL.md` |
 | Shared SDK | Complete | `CONTRACTS.md`, `capabilities.json`, `references/` (reviewer, reporting, sync), `templates/` (7 result skeletons) |
 | Documentation | Complete | `README.md`, `DESIGN.md`, this handoff, `examples/walkthrough-m3.md` |
 | Real-task validation (M3) | Complete, findings fed back design-first | walkthrough + `demo-wordstats` repo: full adopt→run→review→done cycle on a real codebase, audit-review and doctor clean |
@@ -102,7 +102,7 @@ Intake fetching and terminal sync-back are skill instructions over whatever MCP/
 
 ## 4. Validated Assumptions
 
-Only what implementation or testing actually proved. Evidence: 42-test engine suite (`python3 -m unittest discover taskforge-core/tests`) plus the M3 walkthrough on a real repository.
+Only what implementation or testing actually proved. Evidence: 41-test engine suite (`python3 -m unittest discover taskforge/tests`) plus the M3 walkthrough on a real repository.
 
 - **Deterministic engine correctness**: versioning + supersession-reason placement; cascade order incl. escalation cascades; **cross-task decision_ref staleness** (child spec invalidated when parent re-decides); the full readiness rule table incl. pending-escalation precedence and terminal short-circuit.
 - **Result contract**: structural validation, unknown-key rejection, reason-required signals, per-actor **capability enforcement** (deny-by-default, verified at validate and apply), verdict/signal **coherence** incl. the human exemption.
@@ -173,7 +173,7 @@ taskforge-skills/
 ├── DESIGN.md                   the design contract; §10 = decision history incl. overturns
 ├── README.md                   install, operations, judgment-trial protocol
 ├── examples/walkthrough-m3.md  the real-task validation record (commands, findings, deviation)
-├── taskforge-core/             shared SDK — itself a skill (backlog/status/health queries)
+├── taskforge/                  primary entry point + shared SDK (intake, queries, routing)
 │   ├── SKILL.md                triggers on task-status/backlog questions; human unblocking
 │   ├── CONTRACTS.md            THE architecture doc every skill reads once per session
 │   ├── capabilities.json       actor → allowed artifacts/relations/signals (deny-by-default)
@@ -194,7 +194,6 @@ taskforge-skills/
 │   ├── templates/              result.json skeletons (refine-adopt/elaborate/clarify/escalate,
 │   │                           explore-decision, run-approved, run-rejected-escalate)
 │   └── tests/test_engine.py    42 tests, stdlib unittest, imports via the facade
-├── taskforge-add-task/SKILL.md intake: any source → normalized Task (verbatim description)
 ├── taskforge-refine/SKILL.md   universal entry: adopt ▸ elaborate ▸ clarify ▸ escalate
 ├── taskforge-explore/SKILL.md  Decisions + optional decomposition; escalation-only
 └── taskforge-run/SKILL.md      implement + recorded, auditable independent review
@@ -211,12 +210,12 @@ Command surface (all JSON output): `create · show · list [--readiness] · read
 
 You are a fresh Claude Code session. Do exactly this, in order:
 
-1. **Install and verify (10 min).** Install the five skills with `npx skills add hashirventhodi/taskforge-skills` (or copy the directories into your agent's skills directory). From the package root run `python3 -m unittest discover taskforge-core/tests`. Expect **41 OK**. Then in a scratch directory: `python3 <resolved>/tasks.py create --title smoke --description smoke` and `... doctor` (expect clean). If anything fails, stop and fix before proceeding — the engine is the foundation of everything else.
+1. **Install and verify (10 min).** Install the four skills with `npx skills add hashirventhodi/taskforge-skills` (or copy the directories into your agent's skills directory). From the package root run `python3 -m unittest discover taskforge/tests`. Expect **41 OK**. Then in a scratch directory: `python3 <resolved>/tasks.py create --title smoke --description smoke` and `... doctor` (expect clean). If anything fails, stop and fix before proceeding — the engine is the foundation of everything else.
 2. **M4 step (a): prove reviewer isolation with the real Task tool (the single highest-value experiment).** In a small real repo (reuse `demo-wordstats` or equivalent): create one well-written task, refine (expect ADOPT), implement per `taskforge-run/SKILL.md` — and at the review step, actually spawn a **Task-tool subagent** with the recorded prompt. Then run `audit-review` and confirm clean. Success ends the project's largest declared deviation. Failure modes to watch: the subagent receiving ambient context beyond the prompt; malformed reviewer JSON (exercise the one-re-ask rule).
 3. **M4 step (b): the ten-task judgment trial.** Author ten tasks: six well-written (the adopt-inflation trap), two vague-but-directional (elaborate), one requiring external input (clarify), one genuine approach fork (escalate). Run each through natural user phrasing (this simultaneously measures triggering). Grade against the pass criteria in `README.md`. Record results in `examples/` as `judgment-trial-1.md`.
 4. **Only then** iterate prompt text on failures (skill-creator methodology), and only after M4 concludes, start M5.
 
-Rules that bind you: read `taskforge-core/CONTRACTS.md` before executing any workflow skill; never hand-edit `.tasks/`; if you change behavior, DESIGN.md first, code second, and deviations get recorded in §10.
+Rules that bind you: read `taskforge/CONTRACTS.md` before executing any workflow skill; never hand-edit `.tasks/`; if you change behavior, DESIGN.md first, code second, and deviations get recorded in §10.
 
 ---
 

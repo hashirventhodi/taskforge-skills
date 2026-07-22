@@ -9,7 +9,7 @@ Answer one question — **is this task executable?** — and let the answer
 route. Refine produces Specifications; it never makes architectural
 decisions and never implements.
 
-**Prerequisites**: read `taskforge-core/CONTRACTS.md` this session; resolve
+**Prerequisites**: read `taskforge/CONTRACTS.md` this session; resolve
 `$SCRIPT`; guard on readiness (`refine` required — otherwise report actual
 state and the right skill; ask before re-refining a `run`-ready task).
 
@@ -59,7 +59,7 @@ architectural — vague gets ELABORATE or CLARIFY.
 
 ## 3. Emit and apply
 
-Start from the matching template in `taskforge-core/templates/`
+Start from the matching template in `taskforge/templates/`
 (`refine-adopt|elaborate|clarify|escalate.json`); fresh `result_id`;
 follow_ups for anything real you noticed outside this task's scope; then:
 
@@ -70,7 +70,7 @@ python3 $SCRIPT apply <id> result.json --actor refine
 
 A validation rejection means your result is out of contract — fix the
 result, never the store. Report per
-`taskforge-core/references/reporting.md`; name the next skill; stop.
+`taskforge/references/reporting.md`; name the next skill; stop.
 
 ## Quality bar
 

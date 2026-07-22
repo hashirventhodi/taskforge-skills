@@ -60,10 +60,10 @@ tests, and backwards compatible.
 
 ```bash
 export TASKFORGE_DIR=.tasks
-S=taskforge-core/scripts/tasks.py
+S=taskforge/scripts/tasks.py
 python3 $S create --title "..." --description-file d.txt   # intake
 python3 $S readiness TASK-x                                # guard
-# fill taskforge-core/templates/<mode>.json -> result.json
+# fill taskforge/templates/<mode>.json -> result.json
 python3 $S validate result.json --actor refine --task TASK-x
 python3 $S apply TASK-x result.json --actor refine
 python3 $S budget TASK-x            # next_review_version before reviewing

@@ -6,7 +6,7 @@ detection · blocking/wake · retry budgets (derived + enforced) · capability
 enforcement · verdict/signal coherence · idempotency · circuit breaker ·
 config precedence · review-prompt audit · doctor · end-to-end lifecycles.
 
-Run: python3 -m unittest discover taskforge-core/tests
+Run: python3 -m unittest discover taskforge/tests
 """
 import importlib.util
 import json
@@ -57,7 +57,7 @@ class Base(unittest.TestCase):
 
     def make(self, title="t", desc="d"):
         t = tasks.new_task(title, desc)
-        tasks.record(t, "created", "add-task")
+        tasks.record(t, "created", "taskforge")
         tasks.refresh_status(t)
         tasks.save(t)
         return t

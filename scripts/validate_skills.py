@@ -15,7 +15,7 @@ Checks, per skill directory:
   * `name` is lowercase/digits/hyphens and matches its directory
   * `description` is within the 1024-character budget
   * names are unique across the repo
-  * taskforge-core ships alongside the skills that resolve through it
+  * the main `taskforge` skill ships alongside the skills that resolve through it
 
 Exits non-zero with a report on any error. Stdlib-only by default, matching
 the engine's constraint; PyYAML is used only if already installed.
@@ -178,10 +178,10 @@ def main():
         else:
             print("ok   %s (%s)" % (rel, name))
 
-    if "taskforge-core" not in seen:
+    if "taskforge" not in seen:
         failed = True
-        print("\nFAIL taskforge-core is missing — every other skill resolves the "
-              "engine through it as a sibling directory")
+        print("\nFAIL the main taskforge skill is missing — every other skill "
+              "resolves the engine through it as a sibling directory")
 
     print("\n%d skill(s) checked, %s"
           % (len(skill_files), "FAILED" if failed else "all valid"))

@@ -67,7 +67,7 @@ def validate_result(result: dict, actor: str, task=None) -> list:
     caps = store.capabilities()
     if actor not in caps:
         raise TaskforgeError(
-            f"unknown actor {actor!r}: add it to taskforge-core/"
+            f"unknown actor {actor!r}: add it to taskforge/"
             f"capabilities.json to grant capabilities (deny-by-default)")
     cap = caps[actor]
 

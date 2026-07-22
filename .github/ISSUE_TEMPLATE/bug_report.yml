@@ -30,7 +30,7 @@ body:
       label: Which part
       options:
         - Engine (tasks.py / task state)
-        - Skill behaviour (refine / explore / run / add-task / core)
+        - Skill behaviour (taskforge / refine / explore / run)
         - Installation or path resolution
         - Documentation
         - Not sure
@@ -54,12 +54,12 @@ body:
     id: doctor
     attributes:
       label: doctor output
-      description: "`python3 <path>/taskforge-core/scripts/tasks.py doctor`"
+      description: "`python3 <path>/taskforge/scripts/tasks.py doctor`"
       render: json
   - type: checkboxes
     id: checks
     attributes:
       label: Checks
       options:
-        - label: I ran the test suite (`python3 -m unittest discover taskforge-core/tests`)
-        - label: I confirmed all five skills are installed as siblings
+        - label: I ran the test suite (`python3 -m unittest discover taskforge/tests`)
+        - label: I confirmed all four skills are installed as siblings

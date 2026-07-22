@@ -9,7 +9,7 @@ Produce a **Decision**: a committed direction that specification and
 implementation can rely on. Reached only by explicit escalation or explicit,
 confirmed user request — never because a decision merely "doesn't exist yet".
 
-**Prerequisites**: read `taskforge-core/CONTRACTS.md` this session; resolve
+**Prerequisites**: read `taskforge/CONTRACTS.md` this session; resolve
 `$SCRIPT`; guard on readiness (`explore` required; on explicit user request
 without a pending escalation, confirm intent and note it in `notes`).
 
@@ -28,7 +28,7 @@ decision made without looking at the codebase is a guess with formatting.
 
 ## 2. Decide
 
-Fill `taskforge-core/templates/explore-decision.json`:
+Fill `taskforge/templates/explore-decision.json`:
 
 * `chosen_approach` — specific enough that refine needs no follow-up
   question.
@@ -60,7 +60,7 @@ children.
 ## 4. Emit, apply, report
 
 Fresh `result_id`; `validate` then `apply` with `--actor explore`; report
-per `taskforge-core/references/reporting.md` (decision in one sentence,
+per `taskforge/references/reporting.md` (decision in one sentence,
 children with ids, new readiness — `refine` undecomposed, `waiting`
 decomposed); children are backlog, not a work queue — stop.
 
