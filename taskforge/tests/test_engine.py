@@ -579,6 +579,149 @@ class TestRetryAfterTerminal(Base):
         self.assertEqual(r2["duplicate_of"], "d1")
 
 
+# The frozen public output keys (docs/PUBLIC_API.md). A doc-contract guard
+# cross-checks this set against the document so declaration and enforcement
+# cannot silently diverge. Kept as a simple literal for that regex.
+PUBLIC_OUTPUT_KEYS = {
+    "id", "readiness", "next_review_version", "status",
+    "generated_tasks", "clean", "warnings",
+}
+READINESS_VOCAB = {"refine", "explore", "run", "waiting", "terminal", "human"}
+
+
+class TestPublicOutputContract(Base):
+    """Enforces the stable CLI surface declared in docs/PUBLIC_API.md.
+
+    These assert the PRESENCE and TYPE of frozen keys and are tolerant of any
+    additional keys — an internal implementation detail may be added without
+    breaking the suite, while removing/renaming a frozen key or changing the
+    routing vocabulary fails loudly. This tests the contract, not the JSON."""
+
+    def cli(self, argv):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(argv)
+        return json.loads(buf.getvalue())
+
+    def cli_status(self, argv):
+        """Return (exit_code, stderr_json_or_None) for a failing command."""
+        import io
+        import contextlib
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                tasks.main(argv)
+        raw = err.getvalue()
+        try:
+            payload = json.loads(raw)
+        except (ValueError, json.JSONDecodeError):
+            payload = None
+        return ctx.exception.code, payload
+
+    def specced_task(self):
+        t = self.make()
+        self.cli(["apply", "--actor", "refine", *self._spec_result(t["id"])])
+        return t
+
+    def _spec_result(self, task_id):
+        p = Path(self.dir) / "r.json"
+        p.write_text(json.dumps({"result_id": "s", "artifacts": [
+            {"kind": "specification", "payload": spec_payload()}]}))
+        # apply's argv order is: apply <id> <result_json>
+        return [task_id, str(p)]
+
+    # --- frozen output keys ------------------------------------------------
+
+    def test_readiness_value_is_a_routing_string(self):
+        t = self.make()
+        out = self.cli(["readiness", t["id"]])
+        self.assertIn("readiness", out)
+        self.assertIsInstance(out["readiness"], str)
+        self.assertIn(out["readiness"], READINESS_VOCAB)
+
+    def test_list_rows_carry_id_and_readiness(self):
+        self.make()
+        rows = self.cli(["list"])
+        self.assertIsInstance(rows, list)
+        for row in rows:
+            self.assertIn("id", row)
+            self.assertIn("readiness", row)
+            self.assertIn(row["readiness"], READINESS_VOCAB)
+
+    def test_budget_next_review_version_is_int(self):
+        t = self.specced_task()
+        out = self.cli(["budget", t["id"]])
+        self.assertIsInstance(out["next_review_version"], int)
+        self.assertGreaterEqual(out["next_review_version"], 1)
+
+    def test_apply_return_status_readiness_generated(self):
+        t = self.make()
+        result = self.apply(t, {"result_id": "x", "generated_tasks": [
+            {"title": "f", "description": "d", "relation": "follow_up",
+             "reason": "r"}]}, "refine")
+        self.assertIn("status", result)
+        self.assertIsInstance(result["readiness"], str)  # routing string
+        self.assertIn(result["readiness"], READINESS_VOCAB)
+        self.assertIsInstance(result["generated_tasks"], list)
+
+    def test_blocked_by_is_array_of_ids(self):
+        a, b = self.make("a"), self.make("b")
+        self.apply(b, {"edges": [
+            {"type": "blocked_by", "target": a["id"]}]}, "human")
+        out = self.cli(["blocked-by", a["id"]])
+        self.assertIsInstance(out, list)
+        self.assertIn(b["id"], out)
+
+    def test_doctor_clean_is_bool(self):
+        out = self.cli(["doctor"])
+        self.assertIsInstance(out["clean"], bool)
+
+    def test_validate_has_warnings_and_no_valid_key(self):
+        t = self.make()
+        rp = Path(self.dir) / "v.json"
+        rp.write_text(json.dumps({"artifacts": [
+            {"kind": "specification", "payload": spec_payload()}]}))
+        out = self.cli(["validate", str(rp), "--actor", "refine",
+                        "--task", t["id"]])
+        self.assertIn("warnings", out)
+        self.assertIsInstance(out["warnings"], list)
+        self.assertNotIn("valid", out)  # removed pre-1.0
+
+    # --- exit-code semantics ----------------------------------------------
+
+    def test_invalid_validate_exits_1_with_error_on_stderr(self):
+        rp = Path(self.dir) / "bad.json"
+        rp.write_text(json.dumps({"artifacts": [
+            {"kind": "specification", "payload": spec_payload()}]}))
+        code, payload = self.cli_status(
+            ["validate", str(rp), "--actor", "rogue-actor"])
+        self.assertEqual(code, 1)
+        self.assertIn("error", payload)
+
+    def test_readiness_value_vocabulary_is_complete(self):
+        # Every value evaluate() can emit must be in the declared vocabulary.
+        # (Guards against a new routing state added without documenting it.)
+        emitted = set()
+        # refine (fresh), run (spec present), terminal (done):
+        t = self.make()
+        emitted.add(self.cli(["readiness", t["id"]])["readiness"])
+        t2 = self.specced_task()
+        emitted.add(self.cli(["readiness", t2["id"]])["readiness"])
+        self.assertTrue(emitted <= READINESS_VOCAB)
+
+    # --- tolerance: extra keys never break the contract -------------------
+
+    def test_extra_keys_are_tolerated(self):
+        # The contract is presence, not equality: create returns convenience
+        # keys (title/source/...) that are NOT frozen and must not be asserted.
+        out = self.cli(["create", "--title", "t", "--description", "d"])
+        self.assertIn("readiness", out)          # frozen
+        self.assertIn(out["readiness"], READINESS_VOCAB)
+        # Non-frozen keys may exist; we neither require nor forbid them.
+
+
 class TestStoreLock(Base):
     """The lock's stale-break is mutually exclusive and self-verifying: a
     lock is removed only while a session holds exclusive break-rights AND

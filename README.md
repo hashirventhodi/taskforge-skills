@@ -123,7 +123,9 @@ Note that skills execute with your agent's full permissions — read them
 before installing, here as anywhere else in the ecosystem.
 
 The reference documents are `DESIGN.md` (the design and decision history),
-`taskforge/CONTRACTS.md` (the architecture every skill obeys), and
+`taskforge/CONTRACTS.md` (how the engine behaves — the skill-runtime
+contract), [`docs/PUBLIC_API.md`](docs/PUBLIC_API.md) (what we promise never
+to break — the maintainer/tooling contract), and
 [`docs/reviews/`](docs/reviews/) (point-in-time architecture reviews, which
 also record which parts are kept deliberately minimal).
 

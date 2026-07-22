@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""tasks.py — entry point and stable facade of the taskforge engine.
+"""tasks.py — CLI entry point and in-repo import facade of the engine.
 
-This path is the engine's public interface: skills resolve and invoke it,
-and it re-exports the module API so tools and tests have one stable import
-surface. The implementation lives in the engine/ package alongside it:
+The **public contract is the CLI** — subcommand names, documented output
+shapes, exit codes, and --actor names (see docs/PUBLIC_API.md). The Python
+re-exports below are an *internal* convenience for in-repo tests and tooling,
+NOT a supported import surface: they are not covered by the semver promise
+and may change between releases. The implementation lives in the engine/
+package alongside it:
 
     engine/model.py       pure domain: constants, task/artifact/edge helpers
     engine/store.py       filesystem: task files, lock, config, capabilities

@@ -28,7 +28,7 @@ def apply_result(task, result, actor):
     if rid and rid in task.get("applied_results", []):
         return {"task": task["id"], "duplicate_of": rid,
                 "applied": False, "status": task["status"],
-                "readiness": evaluate(task),
+                "readiness": evaluate(task)["readiness"],
                 "note": "result_id already applied; no-op"}
 
     warnings = validate_result(result, actor, task)
@@ -80,7 +80,8 @@ def apply_result(task, result, actor):
     return {"task": task["id"], "applied": True,
             "generated_tasks": generated_ids,
             "signal": applied_signal,
-            "status": task["status"], "readiness": evaluate(task),
+            "status": task["status"],
+            "readiness": evaluate(task)["readiness"],  # routing string
             "warnings": warnings}
 
 

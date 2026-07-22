@@ -535,3 +535,43 @@ mid-cascade with the main lock), auto-recovery stops and acquisition raises
 the "delete the lock if stale" error naming both files. Safety (mutual
 exclusion) is never sacrificed; only liveness degrades to manual recovery in
 that near-impossible case — the right trade for a durability-first engine.
+
+### v0.2.x — the public contract is declared, and made smaller first (T2-3)
+
+**Establishes `docs/PUBLIC_API.md` — the smallest stable surface necessary
+for interoperability — before the version number promises anything.** The
+review found the public boundary undeclared (the facade docstring even called
+itself "the engine's public interface") and the surface skills actually
+depend on — JSON output field names — untested. The work was less "write down
+what exists" than "decide what deserves to be public at all."
+
+The contract is driven by an audit of *actual* consumers: every frozen
+element has an identified reader (skills route on the `readiness` value;
+`reviewer-prompt.md` reads `next_review_version`; `reporting.md` reads apply's
+`status`/`readiness`/`generated_tasks`; the hub reads `list` rows,
+`blocked-by`, `doctor.clean`). Everything with no consumer stays internal:
+the Python facade, storage layout, diagnostic/informational fields, and the
+`summary()` convenience projection. A field that no consumer reads is not part
+of the compatibility burden, however long it has existed.
+
+Two pre-freeze redesigns rather than freezing cruft:
+
+* **Removed `validate.valid`.** It was structurally always `true` (any real
+  invalidity raises → exit 1 + `{error}` on stderr), so it carried no
+  information and had no consumer. Validity is now the exit code; `warnings[]`
+  carries non-fatal observations — consistent with every other command.
+* **Unified `readiness` to the routing string.** It was a bare string in
+  `list`/`readiness` but the full `evaluate()` dict in `summary()`/apply
+  output — the same key with two shapes, ambiguous before it was even
+  published. `readiness` now means the routing string everywhere; the
+  diagnostic detail (`reason`/`blocking_ids`/`cycle`) lives only on the
+  dedicated `readiness` command, where `why` already reads it.
+
+Enforced by `TestPublicOutputContract` (presence-and-type, tolerant of extra
+keys — an internal key may be added freely; removing/renaming a frozen key or
+changing the routing vocabulary fails loudly), and a lightweight both-ways
+doc-contract guard keeps the declaration and the enforcement from diverging —
+the same pattern as command-table↔engine and license↔validator. `CONTRACTS.md`
+was deliberately left lean: it answers "how does the engine behave"
+(skill-runtime); `PUBLIC_API.md` answers "what won't we break" (maintainers +
+tooling) — different audiences, different documents.

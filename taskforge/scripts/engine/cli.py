@@ -12,8 +12,12 @@ from engine.model import (KINDS, TaskforgeError, active, has_edge, new_task,
 
 
 def summary(task):
+    # `readiness` is always the routing string (its one meaning across the
+    # whole CLI). The diagnostic detail (reason/blocking_ids/cycle) lives on
+    # the dedicated `readiness` command, not here.
     return {"id": task["id"], "title": task["title"],
-            "status": task["status"], "readiness": readiness.evaluate(task),
+            "status": task["status"],
+            "readiness": readiness.evaluate(task)["readiness"],
             "pending_escalation": task.get("pending_escalation"),
             "decision_ref": task.get("decision_ref"),
             "edges": task["edges"],
@@ -170,7 +174,9 @@ def run_command(args):
             Path(args.result_json).read_text(encoding="utf-8"))
         task = store.load(args.task) if args.task else None
         warnings = validate_result(result, args.actor, task)
-        out({"valid": True, "actor": args.actor, "warnings": warnings})
+        # No `valid` field: validity is the exit code (0 valid / 1 invalid,
+        # with {error} on stderr). warnings carries non-fatal observations.
+        out({"actor": args.actor, "warnings": warnings})
 
     elif args.cmd == "apply":
         with store.store_lock():

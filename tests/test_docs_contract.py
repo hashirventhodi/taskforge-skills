@@ -212,6 +212,40 @@ class TestSkillLicenses(unittest.TestCase):
                              f"{m.group(1)!r}, expected MIT")
 
 
+class TestPublicApiDeclaration(unittest.TestCase):
+    """docs/PUBLIC_API.md and the contract test may not silently diverge.
+
+    Lightweight and both-ways only: every field declared frozen in the doc
+    must be enforced by the test, and every test-enforced field must be
+    documented. No prose/ordering/formatting validation."""
+
+    DOC = ROOT / "docs" / "PUBLIC_API.md"
+    TEST = HUB / "tests" / "test_engine.py"
+    MARKER = "machine-checked: must equal PUBLIC_OUTPUT_KEYS"
+
+    def doc_keys(self):
+        """The fenced block immediately after the machine-checked marker."""
+        text = read(self.DOC)
+        after = text.split(self.MARKER, 1)[1]
+        block = re.search(r"```\n(.*?)\n```", after, re.DOTALL).group(1)
+        return {line.strip() for line in block.splitlines() if line.strip()}
+
+    def test_keys(self):
+        """The PUBLIC_OUTPUT_KEYS literal from the contract test."""
+        text = read(self.TEST)
+        block = re.search(r"PUBLIC_OUTPUT_KEYS = \{(.*?)\}", text,
+                          re.DOTALL).group(1)
+        return set(re.findall(r'"([a-z_]+)"', block))
+
+    def test_declaration_and_enforcement_match(self):
+        doc, test = self.doc_keys(), self.test_keys()
+        self.assertEqual(
+            doc, test,
+            f"PUBLIC_API.md and TestPublicOutputContract disagree on the "
+            f"frozen key set. Only in doc: {doc - test}; only in test: "
+            f"{test - doc}")
+
+
 class TestUntrustedTextFileForm(unittest.TestCase):
     """The P0 injection fix: source-derived text uses the file form. Guards
     against a doc example regressing to inline --title/--description."""

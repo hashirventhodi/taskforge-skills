@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`docs/PUBLIC_API.md` — the public stability contract** (review finding
+  T2-3, [#3](https://github.com/hashirventhodi/taskforge-skills/issues/3)).
+  Declares the smallest stable surface (CLI subcommand names, a short set of
+  frozen output keys with identified consumers, exit-code semantics, the
+  readiness routing vocabulary, and `--actor` names), the semver policy, and
+  an explicit non-goals list (the Python facade, storage layout, and
+  diagnostic/convenience output are internal and may change). Enforced by
+  `TestPublicOutputContract` (presence-and-type, tolerant of additions) with a
+  both-ways doc-contract guard so the declaration and the test cannot diverge.
+
+### Changed — public output (breaking, pre-1.0)
+- **Removed the `valid` key from `validate` output.** It was structurally
+  always `true`; validity is the exit code (0 valid / 1 invalid, `{error}` on
+  stderr) and `warnings[]` carries non-fatal observations.
+- **`readiness` is now always the routing string** in every command's output.
+  It was previously the full `evaluate()` object in `create`/`show`-summary/
+  `cancel`/`reopen`/`apply` output but a bare string in `list`/`readiness`.
+  The diagnostic detail (`reason`/`blocking_ids`/`cycle`) remains available
+  from the dedicated `readiness <id>` command.
+
 ### Fixed
 - **Stale-lock recovery is race-free** (review finding T1-2,
   [#2](https://github.com/hashirventhodi/taskforge-skills/issues/2)). Breaking
