@@ -34,10 +34,19 @@ worth checking before proposing a change to the model.
 No install step. Clone it and run:
 
 ```bash
-python3 -m unittest discover taskforge/tests        # 41 tests, must pass
+python3 -m unittest discover taskforge/tests        # engine suite, must pass
+python3 -m unittest discover tests                  # doc-contract guards
 python3 scripts/validate_skills.py                  # frontmatter validation
 pip install pyyaml                                  # optional, sharper validation
 ```
+
+Two test roots, on purpose: `taskforge/tests/` is the engine suite and ships
+inside the skill; the repo-level `tests/` holds **doc-contract** guards
+(referenced paths resolve, the command table matches the engine, templates
+are result-shaped, no stale names or hardcoded test counts, source-derived
+text uses the file form). They are dev-only and scan repo-root docs an
+install never carries. If you rename a file, move a command, or change an
+example, run them before pushing.
 
 To test as a user would, install from your working tree:
 

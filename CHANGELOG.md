@@ -35,6 +35,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `add-task` are records, not validated state.
 
 ### Added
+- Doc-contract test suite (repo-level `tests/`, stdlib-only, in CI): guards
+  that every path a skill references resolves, the documented command table
+  matches the engine's real subcommands both ways, every template is
+  result-shaped JSON, no renamed identifiers or hardcoded test counts survive
+  in evergreen docs, engine resolution is single-sourced in CONTRACTS.md, and
+  source-derived text keeps the file form. Catches the drift class that hit
+  this repo repeatedly (40→41→42 test counts, `-v2` naming, stale paths).
 - Open-source project scaffolding: MIT `LICENSE`, `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue and pull request templates.
 - `scripts/validate_skills.py` — validates every `SKILL.md` against the

@@ -26,7 +26,7 @@ taskforge/             the primary entry point + shared SDK
                        apply · audit · cli — one writer, decomposed by concern
   references/          intake procedure · reviewer component · reporting · sync-back
   templates/           result.json skeletons per skill/mode
-  tests/               41-test stdlib unittest suite for the engine
+  tests/               stdlib unittest suite for the engine
 taskforge-refine/      universal entry: adopt | elaborate | clarify | escalate
 taskforge-explore/     Decisions; decomposition into children
 taskforge-run/         implement + recorded, auditable fresh-context review
@@ -75,6 +75,7 @@ but is never its enforcement.
 
 ```bash
 python3 -m unittest discover taskforge/tests         # engine correctness
+python3 -m unittest discover tests                   # doc-contract guards
 python3 scripts/validate_skills.py                   # SKILL.md frontmatter
 python3 taskforge/scripts/tasks.py doctor            # store integrity
 python3 taskforge/scripts/tasks.py audit-review TASK-x        # reviewer isolation
