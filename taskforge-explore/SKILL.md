@@ -1,6 +1,6 @@
 ---
 name: taskforge-explore
-description: Produce an engineering Decision for a taskforge task - chosen approach, real alternatives with rejection reasons, trade-offs, risks - and optionally decompose large work into child tasks. Use when a task's readiness is "explore" (an escalation is pending from refine, run, or a child task), or when the user explicitly asks to explore, architect, decide an approach for, or break down a taskforge task. Not for writing specifications (taskforge-refine) or implementing (taskforge-run).
+description: Produce an engineering Decision for a taskforge task - chosen approach, real alternatives with rejection reasons, trade-offs, risks - and propose decomposition or related work for human approval. Use when a task's readiness is "explore" (an escalation is pending from refine, run, or a child task), or when the user explicitly asks to explore, architect, decide an approach for, or break down a taskforge task. Not for writing specifications (taskforge-refine) or implementing (taskforge-run).
 license: MIT
 ---
 
@@ -13,6 +13,13 @@ confirmed user request — never because a decision merely "doesn't exist yet".
 **Prerequisites**: read `taskforge/CONTRACTS.md` this session; resolve
 `$SCRIPT`; guard on readiness (`explore` required; on explicit user request
 without a pending escalation, confirm intent and note it in `notes`).
+
+**What you may and may not commit** (CONTRACTS → "Topology"). A Decision is
+**content** — you record it. Child tasks, backlog tasks, and dependency edges
+are **topology** — they change the shape of the work graph, and only a human
+may commit them. The engine enforces this: your actor cannot create tasks or
+dependency edges. You *reason and recommend* freely; you **propose** topology
+and the human approves it.
 
 ## 1. Read the question you were summoned to answer
 
@@ -29,45 +36,50 @@ decision made without looking at the codebase is a guess with formatting.
 
 ## 2. Decide
 
-Fill `taskforge/templates/explore-decision.json`:
+Fill the decision payload (`chosen_approach`, `rationale`, `alternatives`
+each with a falsifiable `rejected_because`, `trade_offs`, `risks`). No real
+alternatives? Say so — the task may not have needed explore, and the honest
+note beats invented contenders.
 
-* `chosen_approach` — specific enough that refine needs no follow-up
-  question.
-* `rationale` — in terms of this codebase and these constraints; if
-  decomposing, include the integration intent (the parent still gets its own
-  refine + run after children complete — decomposition is not a way to
-  launder a feature past review).
-* `alternatives` — the real contenders, each `rejected_because` a falsifiable
-  claim about this codebase. No real alternatives? Say so — the task may not
-  have needed explore, and the honest note is worth more than invented
-  contenders.
-* `trade_offs` — every real decision costs something; empty is a red flag.
-* `risks` — what would invalidate this decision, so a future re-exploration
-  knows what changed.
+## 3. Route — content commits, topology is proposed
 
-**Escape valve**: build-vs-buy, budget, conflicting stakeholders — not your
-decision. `signal: block_on_human` with the question, the options, and their
-implications spelled out for a one-message answer.
+**Self-contained** — the Decision changes only this task (no decomposition,
+no new tasks, no dependency edges). Start from `templates/explore-decision.json`,
+`apply --actor explore`, route to refine. Done.
 
-## 3. Decompose only when size demands
+**Entails topology** — the Decision implies splitting the work, related
+backlog work, or new dependencies. Do **not** create any of it (the engine
+won't let you). Start from `templates/explore-propose.json`: in ONE result,
+record the decision **and** `signal: block_on_human`, with `signal_reason`
+carrying the structured proposal —
 
-Children: each independently implementable and reviewable, sized for one
-run, description written like a good issue (it becomes one — refine will
-judge it). The engine wires parent + blocking edges and pins each child to
-your Decision; don't restate the decision in child descriptions. More than
-~6 children → reconsider the split. Research ideas are `follow_up`, never
-children.
+* **Decomposition** (if any): the proposed children, each an issue-quality
+  title + description sized for one run, as a numbered list to approve/adjust.
+  More than ~6 → reconsider the split.
+* **Related findings** (if any): each discovery *outside this task's scope*,
+  with a recommendation — **promote to backlog · note only · ignore**. A
+  finding is not a task; the human decides.
+* Your recommendation and why, so a one-message answer suffices.
+
+The parent parks; `taskforge` renders the proposal and, on approval, commits
+the chosen topology **as the human**. You never create the children or edges.
+
+**Not your call at all** — build-vs-buy, budget, conflicting stakeholders:
+`block_on_human` with the question and options; record no decision.
 
 ## 4. Emit, apply, report
 
-Fresh `result_id`; `validate` then `apply` with `--actor explore`; report
-per `taskforge/references/reporting.md` (decision in one sentence,
-children with ids, new readiness — `refine` undecomposed, `waiting`
-decomposed); children are backlog, not a work queue — stop.
+Fresh `result_id`; `validate` then `apply --actor explore`; report per
+`taskforge/references/reporting.md`. Self-contained → new readiness `refine`.
+Proposed topology → `blocked_on_human`; name the human approval as the next
+step and **stop**.
 
 ## Quality bar
 
 * The escalation reason is explicitly answered.
 * Rejection reasons are falsifiable, not platitudes.
-* Any child is refinable from its description + the inherited decision alone.
+* A proposed child is refinable from its title + description + the inherited
+  decision alone.
+* Findings are recommendations with a clear promote/note/ignore, never
+  silently created work.
 * Re-explorations state what changed and why the old approach is dead.

@@ -6,8 +6,8 @@ enforce identical rules by construction.
 """
 from engine import store
 from engine.model import (FORBIDDEN_EDGES, KINDS, REASON_REQUIRED_SIGNALS,
-                          RELATIONS, RESULT_KEYS, SIGNALS, TERMINAL,
-                          TaskforgeError, active)
+                          RELATIONS, RESULT_KEYS, SEMANTIC_EDGES, SIGNALS,
+                          TERMINAL, TaskforgeError, active)
 
 
 def validate_edge_type(t: str) -> str:
@@ -131,12 +131,20 @@ def validate_result(result: dict, actor: str, task=None) -> list:
                 "generated tasks require non-empty title and description")
 
     for e in result.get("edges", []):
-        validate_edge_type(e.get("type", ""))
+        etype = validate_edge_type(e.get("type", ""))
         if not e.get("target"):
             raise TaskforgeError("edge requires a target task id")
         if task is not None and e["target"] == task["id"]:
             raise TaskforgeError(
                 f"edge {e['type']!r} cannot point at its own task")
+        # Topology edges (dependency/hierarchy — SEMANTIC_EDGES) change the
+        # shape of the work graph, so they are capability-gated: an actor may
+        # not autonomously restructure the graph. Annotation edges
+        # (relates_to, ...) are metadata, not topology, and stay ungated.
+        if etype in SEMANTIC_EDGES and not allowed("edges", etype):
+            raise TaskforgeError(
+                f"actor {actor!r} may not add a {etype!r} edge — that is a "
+                f"topology change (allowed: {cap.get('edges', [])})")
 
     if task is not None and task["status"] in TERMINAL and actor != "human":
         raise TaskforgeError(

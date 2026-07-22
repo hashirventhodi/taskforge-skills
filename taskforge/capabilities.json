@@ -1,9 +1,12 @@
 {
-  "_comment": "Actor capabilities, enforced by tasks.py at validate/apply. Deny-by-default: an actor absent from this file may apply nothing. Adding a skill = adding an entry here (data, not code). '*' means unrestricted.",
+  "_comment": "Actor capabilities, enforced by tasks.py at validate/apply. Deny-by-default: an actor absent from this file may apply nothing. Adding a skill = adding an entry here (data, not code). '*' means unrestricted. 'edges' governs topology edges emitted directly in result.edges (SEMANTIC_EDGES: parent/blocked_by/generated_from); annotation edges (relates_to, ...) are metadata and stay ungated. Topology — new tasks via 'relations', dependency edges via 'edges' — is how the work graph changes; an actor without those capabilities may change a task's contents but not the graph's shape (see CONTRACTS: Topology).",
   "taskforge": {
     "artifacts": [],
     "relations": [
       "follow_up"
+    ],
+    "edges": [
+      "blocked_by"
     ],
     "signals": [
       "none"
@@ -17,6 +20,7 @@
       "prerequisite",
       "follow_up"
     ],
+    "edges": [],
     "signals": [
       "none",
       "escalate_explore",
@@ -27,10 +31,8 @@
     "artifacts": [
       "decision"
     ],
-    "relations": [
-      "child",
-      "follow_up"
-    ],
+    "relations": [],
+    "edges": [],
     "signals": [
       "none",
       "block_on_human"
@@ -44,6 +46,7 @@
     "relations": [
       "follow_up"
     ],
+    "edges": [],
     "signals": [
       "none",
       "done",
@@ -55,6 +58,7 @@
   "human": {
     "artifacts": "*",
     "relations": "*",
+    "edges": "*",
     "signals": "*"
   }
 }

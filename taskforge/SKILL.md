@@ -35,7 +35,7 @@ the next skill; it never runs it.
 
 | command | intent | how |
 |---|---|---|
-| *(none)* / `status` | overview | `list`; summarize counts per readiness, surface `blocked_on_human` tasks with their questions |
+| *(none)* / `status` | overview | `list`; counts per readiness. Split the `blocked_on_human` tasks into **awaiting approval** (a `human_blocked` event proposing topology — see Approving) and **blocked on an answer**, and surface each with its question |
 | `add <source…>` | create/import tasks | follow `references/intake.md` |
 | `backlog` | full list | `python3 $SCRIPT list` (filter: `--readiness refine\|explore\|run\|waiting\|terminal\|human`) |
 | `next` | what should happen now | `list --readiness run`, else `refine`/`explore`; name the task(s) and the skill each needs |
@@ -52,8 +52,8 @@ the next skill; it never runs it.
 
 When answering `why`: quote `readiness` (its `reason`, `blocking_ids`, or
 `cycle`), then the last few relevant history events. For `blocked_on_human`,
-surface the `human_blocked` event's reason — that is the question awaiting
-an answer.
+surface the `human_blocked` event's reason — a **topology proposal** from
+explore (see Approving) or a question awaiting an answer.
 
 ## Human unblocking
 
@@ -69,6 +69,31 @@ Attach a result.json only if the answer translates into artifacts (e.g. the
 human dictated the spec); otherwise the note alone re-enters the task and
 readiness routes it. After either command, report new readiness and name the
 next skill — do not execute it.
+
+## Approving a topology proposal
+
+`taskforge-explore` may change a task's **contents** (its decision) but not
+the **topology** of the work graph (child tasks, backlog tasks, dependency
+edges) — that requires human approval (CONTRACTS → "Topology"). When explore
+proposes topology it records the decision and parks the task
+`blocked_on_human` with the proposal in the `human_blocked` event's reason.
+
+Render the proposal and get the human's call per item — approve the
+decomposition (or adjust it), and for each finding **promote to backlog ·
+note only · ignore**. Then commit the approved topology **as the human**:
+write the chosen children (`relation: child`) and any promoted findings
+(`relation: follow_up`) into a `result.json`, and
+
+```bash
+python3 $SCRIPT human-update TASK-x --note-file /tmp/approval.txt result.json
+```
+
+The engine wires the children, pins each to explore's decision, and re-routes
+the parent (`waiting` while children are open). The human is the actor of
+record; explore's proposal stays in history. If the human rejects the
+*decision itself* (not just its topology), route to a re-exploration instead
+of committing children. Never create the topology on explore's behalf without
+the human's approval.
 
 ## Reopening a closed task
 

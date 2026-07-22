@@ -168,9 +168,9 @@ python3 $SCRIPT apply    <id> result.json --actor <skill>
 ```
 
 The engine enforces per-actor capabilities (`capabilities.json`): which
-artifact kinds, relations, and signals your skill may emit. A validation
-rejection means **your result is out of contract — fix the result**, never
-work around the engine.
+artifact **kinds**, generated-task **relations**, dependency **edges**, and
+**signals** your skill may emit. A validation rejection means **your result
+is out of contract — fix the result**, never work around the engine.
 
 Signal semantics (engine-implemented; know what you trigger):
 
@@ -206,12 +206,34 @@ goes; it may never make declared work disappear.
   never auto-executed.
 * `prerequisite` — the current task cannot proceed without it; the engine
   blocks the origin on it.
-* `child` — decomposition (Explore's relation). The engine wires
-  parent + blocking edges and pins the child's `decision_ref`.
+* `child` — decomposition. The engine wires parent + blocking edges and pins
+  the child's `decision_ref`. Proposed by Explore, committed by a human — see
+  Topology.
 
 **Scope discipline (binding on every skill):** anything discovered outside
 the task's active specification becomes a generated task — never inline
 work, never silent scope expansion.
+
+## Topology (invariant)
+
+**A skill may autonomously change a task's *contents*. It may not
+autonomously change the *topology* of the work graph.** Topology is anything
+that alters the graph's shape: creating child tasks, creating follow-up /
+backlog tasks, or adding a dependency edge (`blocked_by`). Everything else —
+investigation, options, a Decision, a Specification, an implementation — is
+content *within* an existing task.
+
+Topology is engine-gated by capabilities: `relations` governs task creation,
+`edges` governs dependency edges (the topology edge types `parent`,
+`blocked_by`, `generated_from`; annotation edges like `relates_to` are
+metadata, not topology, and stay ungated). Because `explore` holds neither,
+it **proposes** topology and a human commits it: Explore records its Decision
+(content) and parks the task `blocked_on_human` with the proposed
+decomposition and findings (promote / note only / ignore) in the reason. The
+human approves via `human-update` (actor `human`, capabilities `*`), which
+commits the chosen children/edges. Reasoning and recommendation are
+autonomous; changing the graph — which creates durable work for other tasks
+and people — requires human approval.
 
 **Never auto-execute:** applying your result ends your authority. Report
 what was generated and each task's readiness; the human (or an explicit

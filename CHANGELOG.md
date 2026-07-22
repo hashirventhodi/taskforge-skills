@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — Explore: topology requires human approval (breaking, pre-1.0)
+- **A skill may autonomously change a task's *contents*, but not the
+  *topology* of the work graph** (child tasks, backlog tasks, dependency
+  edges) — the new engine invariant (DESIGN §10.13), found by real use where
+  Explore autonomously split an issue into children and created tangential
+  backlog tasks. Reasoning and recommendation stay fully autonomous; only the
+  graph-changing commit gates, and the gate is a deterministic engine
+  property, never a judgment about "consequentiality."
+- `capabilities.json`: `explore` loses `relations` and `edges` (it keeps
+  `decision` — content). Explore now *proposes* topology — it records its
+  Decision and parks the task `blocked_on_human` with the proposed
+  decomposition and findings (promote / note only / ignore); the human
+  commits the approved children via `human-update` (actor `human`). Existing
+  primitives throughout — no new engine subsystem, no new readiness value.
+- New `edges` capability dimension gates topology edge types
+  (`parent`/`blocked_by`/`generated_from`), closing a pre-existing hole where
+  `result.edges` were ungated for every actor. Annotation edges
+  (`relates_to`) stay ungated (metadata, not topology).
+- `run`'s `follow_up` behavior is deliberately **unchanged** (usage-first).
+
 ## [0.3.0] - 2026-07-22
 
 The architectural-hardening release: the four Tier 1–2 findings from the

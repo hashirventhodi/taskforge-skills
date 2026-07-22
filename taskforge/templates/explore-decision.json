@@ -4,16 +4,12 @@
     "kind": "decision",
     "payload": {
       "chosen_approach": "specific enough that refine needs no follow-up questions",
-      "rationale": "in terms of THIS codebase and its constraints; include integration intent if decomposing",
+      "rationale": "in terms of THIS codebase and its constraints",
       "alternatives": [{"approach": "", "rejected_because": "falsifiable claim"}],
       "trade_offs": ["every real decision costs something"],
       "risks": ["what would invalidate this decision later"]
     },
     "supersedes_reason": "only when re-exploring"
   }],
-  "generated_tasks": [
-    {"title": "child task (delete if not decomposing)", "description": "written like a good issue - it becomes one", "relation": "child", "reason": "decomposition"},
-    {"title": "research idea (delete if none)", "description": "", "relation": "follow_up", "reason": "research follow-up"}
-  ],
-  "notes": "decision: <chosen approach, one line>"
+  "notes": "self-contained decision (changes only this task): <chosen approach, one line>"
 }

@@ -132,9 +132,11 @@ class TestCascades(Base):
             {"kind": "decision", "payload": decision_payload("v1")}]},
             "explore")
         parent = self.reload(parent)
+        # Topology (children) is the human's to commit, not explore's; the
+        # decision above is explore's content. Mechanics below are unchanged.
         r = self.apply(parent, {"generated_tasks": [
             {"title": "kid", "description": "d", "relation": "child"}]},
-            "explore")
+            "human")
         kid_id = r["generated_tasks"][0]
         kid = tasks.load(kid_id)
         self.assertEqual(kid["decision_ref"]["version"], 1)
@@ -383,9 +385,11 @@ class TestEscalationSemantics(Base):
         self.apply(parent, {"artifacts": [
             {"kind": "decision", "payload": decision_payload()}]}, "explore")
         parent = self.reload(parent)
+        # Topology (children) is the human's to commit, not explore's; the
+        # decision above is explore's content. Mechanics below are unchanged.
         r = self.apply(parent, {"generated_tasks": [
             {"title": "kid", "description": "d", "relation": "child"}]},
-            "explore")
+            "human")
         kid = tasks.load(r["generated_tasks"][0])
         self.apply(kid, {"signal": "escalate_explore",
                          "signal_reason": "cannot work"}, "run")
@@ -496,12 +500,14 @@ class TestLifecycles(Base):
         self.apply(t, {"signal": "escalate_explore",
                        "signal_reason": "undecided"}, "refine")
         t = self.reload(t)
-        r = self.apply(t, {"artifacts": [
-            {"kind": "decision", "payload": decision_payload()}],
-            "generated_tasks": [
-                {"title": "A", "description": "a", "relation": "child"},
-                {"title": "B", "description": "b", "relation": "child"}]},
-            "explore")
+        # Explore commits the decision (content); the human commits the
+        # decomposition (topology) — the two-step realization of the invariant.
+        self.apply(t, {"artifacts": [
+            {"kind": "decision", "payload": decision_payload()}]}, "explore")
+        t = self.reload(t)
+        r = self.apply(t, {"generated_tasks": [
+            {"title": "A", "description": "a", "relation": "child"},
+            {"title": "B", "description": "b", "relation": "child"}]}, "human")
         t = self.reload(t)
         self.assertEqual(tasks.evaluate(t)["readiness"], "waiting")
         for kid_id in r["generated_tasks"]:
@@ -720,6 +726,103 @@ class TestPublicOutputContract(Base):
         self.assertIn("readiness", out)          # frozen
         self.assertIn(out["readiness"], READINESS_VOCAB)
         # Non-frozen keys may exist; we neither require nor forbid them.
+
+
+class TestTopologyInvariant(Base):
+    """Explore may autonomously change a task's *contents* (its decision) but
+    not the *topology* of the work graph (child tasks, backlog tasks,
+    dependency edges). Topology is engine-gated by capabilities; the human
+    commits it. The load-bearing property: an autonomous actor cannot
+    restructure the graph."""
+
+    def spec_result(self):
+        return {"artifacts": [{"kind": "specification",
+                               "payload": spec_payload()}]}
+
+    def decision_result(self):
+        return {"artifacts": [{"kind": "decision",
+                               "payload": decision_payload()}]}
+
+    # --- explore may commit content ---------------------------------------
+
+    def test_explore_may_record_a_self_contained_decision(self):
+        t = self.make()
+        self.apply(t, {"signal": "escalate_explore",
+                       "signal_reason": "fork"}, "refine")
+        t = self.reload(t)
+        self.apply(t, self.decision_result(), "explore")   # content, allowed
+        t = self.reload(t)
+        self.assertIsNotNone(tasks.active(t, "decision"))
+        self.assertEqual(tasks.evaluate(t)["readiness"], "refine")  # routes on
+
+    def test_explore_may_propose_topology_via_block(self):
+        # The real flow: record the decision AND park for topology approval,
+        # in one result. The decision commits; nothing topological does.
+        t = self.make()
+        r = self.apply(t, {
+            "artifacts": [{"kind": "decision",
+                           "payload": decision_payload()}],
+            "signal": "block_on_human",
+            "signal_reason": "proposing 2 children + 1 finding for approval"},
+            "explore")
+        t = self.reload(t)
+        self.assertIsNotNone(tasks.active(t, "decision"))   # content committed
+        self.assertEqual(t["status"], "blocked_on_human")   # topology parked
+
+    # --- explore may NOT commit topology (the invariant) ------------------
+
+    def test_explore_cannot_create_children(self):
+        t = self.make()
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            self.apply(t, {"generated_tasks": [
+                {"title": "c", "description": "d", "relation": "child"}]},
+                "explore")
+        self.assertIn("may not generate 'child'", str(ctx.exception))
+
+    def test_explore_cannot_create_follow_up_backlog(self):
+        t = self.make()
+        with self.assertRaises(tasks.TaskforgeError):
+            self.apply(t, {"generated_tasks": [
+                {"title": "f", "description": "d", "relation": "follow_up"}]},
+                "explore")
+
+    def test_explore_cannot_add_a_dependency_edge(self):
+        blocker = self.make("blocker")
+        t = self.make("t")
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            self.apply(t, {"edges": [
+                {"type": "blocked_by", "target": blocker["id"]}]}, "explore")
+        self.assertIn("topology", str(ctx.exception))
+
+    def test_explore_may_add_an_annotation_edge(self):
+        # Annotation edges are metadata, not topology — ungated.
+        other = self.make("other")
+        t = self.make("t")
+        self.apply(t, {"edges": [
+            {"type": "relates_to", "target": other["id"]}]}, "explore")
+        self.assertTrue(tasks.has_edge(self.reload(t), "relates_to",
+                                       other["id"]))
+
+    # --- the human commits topology; taskforge intake unaffected ----------
+
+    def test_human_commits_the_approved_topology(self):
+        t = self.make()
+        self.apply(t, self.decision_result(), "explore")   # decision content
+        t = self.reload(t)
+        r = self.apply(t, {"generated_tasks": [   # approval → human commits
+            {"title": "child", "description": "d", "relation": "child"}]},
+            "human")
+        kid = tasks.load(r["generated_tasks"][0])
+        self.assertEqual(kid["decision_ref"]["task_id"], t["id"])  # pinned
+        self.assertEqual(tasks.evaluate(self.reload(t))["readiness"], "waiting")
+
+    def test_taskforge_intake_may_still_wire_a_blocked_by_edge(self):
+        dep = self.make("dep")
+        t = self.make("t")
+        self.apply(t, {"edges": [
+            {"type": "blocked_by", "target": dep["id"]}]}, "taskforge")
+        self.assertTrue(tasks.has_edge(self.reload(t), "blocked_by",
+                                       dep["id"]))
 
 
 class TestSchemaEvolution(Base):

@@ -1,0 +1,16 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "artifacts": [{
+    "kind": "decision",
+    "payload": {
+      "chosen_approach": "the approach; name the integration intent if it decomposes",
+      "rationale": "in terms of THIS codebase and its constraints",
+      "alternatives": [{"approach": "", "rejected_because": "falsifiable claim"}],
+      "trade_offs": [""],
+      "risks": [""]
+    }
+  }],
+  "signal": "block_on_human",
+  "signal_reason": "TOPOLOGY PROPOSED FOR APPROVAL — the engine will not let explore create tasks or dependency edges; the human commits them.\n\nDECOMPOSITION (delete if none):\n  1. <title> — <issue-quality description, sized for one run>\n  2. ...\n\nRELATED FINDINGS outside this task's scope (delete if none; a finding is not a task):\n  - <finding> → recommend: promote to backlog | note only | ignore\n\nRECOMMENDATION: <what you'd approve, and why — enough for a one-message answer>",
+  "notes": "decision recorded; topology proposed for human approval"
+}

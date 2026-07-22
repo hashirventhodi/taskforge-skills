@@ -636,3 +636,63 @@ recovery, and only after re-confirming), **#3 compatibility** (the public
 surface is the CLI; internal structure is free to change), and **#4
 evolution** (an engine never mutates or routes on data from a newer version
 of itself).
+
+### v0.3.x — §10.13 topology requires human approval (Explore)
+
+**Found by real use (a GitHub issue explored autonomously): Explore chose an
+approach, split the issue into children, and created backlog tasks for
+unrelated discoveries — all committed with no human in the loop.** Every
+piece was correct; the problem was *autonomous commitment of consequential
+state*, at the one artifact with no independent gate. An implementation
+cannot reach `done` without a review; a Decision — higher leverage, since it
+binds children and shapes scope — had none.
+
+The rule, stated so a contributor can reason from it:
+
+> **A skill may autonomously change a task's *contents*. It may not
+> autonomously change the *topology* of the work graph** — creating child
+> tasks, creating backlog tasks, or adding a dependency edge.
+
+The critical design move was **what to gate on**. The first instinct — "gate
+when Explore judges the decision consequential / multi-option" — puts the
+producer back in charge of deciding whether its own output needs review, the
+self-grading pattern the engine exists to remove, at the one point with no
+backstop. So we gate on a **deterministic, engine-verifiable property**
+(does the outcome create tasks or dependency edges?), never on judgment.
+Reasoning and recommendation stay fully autonomous; only the graph-changing
+commit gates.
+
+Enforcement is the capability matrix, not a prompt: `explore` loses
+`relations` (no task creation) and `edges` (no dependency edges), keeping
+`decision` (content). A pre-existing hole surfaced — `result.edges` were
+ungated for *every* actor — so an `edges` capability dimension was added,
+gating the topology edge types (`SEMANTIC_EDGES`) while leaving annotation
+edges (`relates_to`) free. Explore now *proposes* topology: it records its
+Decision (content) and parks the task `blocked_on_human` with the proposal;
+the human commits the approved children/findings via `human-update` (actor
+`human`). Every mechanic already existed — `block_on_human`, `human-update`,
+`materialize`, `decision_ref` — so this is a data edit + a protocol, not a new
+subsystem. No new readiness value; the Hub distinguishes "awaiting approval"
+from "blocked on an answer" by the block's detail (presentation only).
+
+**Accepted residual risk:** a *self-contained* decision (changes only this
+task, no topology) still commits autonomously. Its blast radius is one task
+and the normal workflow (refine, review, re-exploration) can correct it —
+qualitatively different from a graph change, which creates durable work for
+other tasks and people. **Deferred (usage-first):** `run` also auto-creates
+`follow_up` tasks; those are discovered while completing an already-approved
+task and don't restructure the graph under execution, so the same rule is
+*not* extended to `run` yet — we gather evidence before making every rule
+symmetric.
+
+**Independent corroboration:** the frozen `squad-skills` package reached the
+same boundary from the opposite direction — its explore saves the report
+autonomously but gates *task creation* behind an explicit human choice
+("save report only, don't create tasks"). Two independently designed systems
+drew the same line (AI owns investigation + recommendation; humans own the
+work graph), which raised confidence this is an abstraction, not an
+invention. Where TaskForge differs — and is stronger for its philosophy — is
+mechanism: Squad gates by a synchronous prompt convention (`AskUserQuestion`,
+no engine to enforce it); TaskForge gates by a durable, engine-enforced
+capability (`block_on_human` + deny-by-default), so the boundary holds
+whether or not a human is in the session and whatever a model chooses to do.
