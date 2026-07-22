@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(python3 -c 'import json,sys;print(json.load(sys.stdin).get(\"tool_input\",{}).get(\"file_path\",\"\"))'); if [ -n \"$f\" ]; then bash \"$CLAUDE_PROJECT_DIR/scripts/hooks/on-edit.sh\" \"$f\"; fi",
+            "statusMessage": "taskforge: on-edit check"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/hooks/verify-changed.sh\" || true",
+            "statusMessage": "taskforge: verifying changed files"
+          }
+        ]
+      }
+    ]
+  }
+}

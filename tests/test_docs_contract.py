@@ -140,7 +140,8 @@ class TestNoStaleIdentifiers(unittest.TestCase):
     def current_state_docs(self):
         docs = list(SKILL_FILES) + list(REFERENCE_FILES)
         docs += [HUB / "CONTRACTS.md"]
-        for name in ("README.md", "CONTRIBUTING.md", "SECURITY.md"):
+        for name in ("README.md", "CONTRIBUTING.md", "SECURITY.md",
+                     "AGENTS.md", "CLAUDE.md"):
             docs.append(ROOT / name)
         return docs
 
@@ -227,20 +228,21 @@ class TestPublicApiDeclaration(unittest.TestCase):
         block = re.search(r"```\n(.*?)\n```", after, re.DOTALL).group(1)
         return {line.strip() for line in block.splitlines() if line.strip()}
 
-    def test_keys(self):
-        """The PUBLIC_OUTPUT_KEYS literal from the contract test."""
+    def enforced_keys(self):
+        """The PUBLIC_OUTPUT_KEYS literal from the contract test. (Helper —
+        NOT a test; must not start with `test` or unittest would run it.)"""
         text = read(self.TEST)
         block = re.search(r"PUBLIC_OUTPUT_KEYS = \{(.*?)\}", text,
                           re.DOTALL).group(1)
         return set(re.findall(r'"([a-z_]+)"', block))
 
     def test_declaration_and_enforcement_match(self):
-        doc, test = self.doc_keys(), self.test_keys()
+        doc, enforced = self.doc_keys(), self.enforced_keys()
         self.assertEqual(
-            doc, test,
+            doc, enforced,
             f"PUBLIC_API.md and TestPublicOutputContract disagree on the "
-            f"frozen key set. Only in doc: {doc - test}; only in test: "
-            f"{test - doc}")
+            f"frozen key set. Only in doc: {doc - enforced}; only in test: "
+            f"{enforced - doc}")
 
 
 class TestUntrustedTextFileForm(unittest.TestCase):
