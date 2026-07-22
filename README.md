@@ -1,9 +1,14 @@
 # taskforge-skills
 
-A production-quality Claude Code Skills framework implementing the
-durable-Task AI engineering workflow. Drop it into any repository: skills
-perform reasoning; a shared deterministic engine is the only writer of task
-state.
+A production-quality Agent Skills framework implementing the durable-Task
+AI engineering workflow. Drop it into any repository: skills perform
+reasoning; a shared deterministic engine is the only writer of task state.
+
+Developed against Claude Code and installable into any agent the
+[skills.sh](https://skills.sh) CLI supports. The one agent-specific
+requirement is a fresh-context subagent for `taskforge-run`'s independent
+review; where none exists the skill stops rather than recording a
+self-review.
 
 ```
 taskforge-core/        shared SDK + status/backlog skill
@@ -14,7 +19,7 @@ taskforge-core/        shared SDK + status/backlog skill
                        apply · audit · cli — one writer, decomposed by concern
   references/          reviewer component · reporting · sync-back
   templates/           result.json skeletons per skill/mode
-  tests/               40-test stdlib unittest suite for the engine
+  tests/               41-test stdlib unittest suite for the engine
 taskforge-add-task/    intake: any source → normalized Task
 taskforge-refine/      universal entry: adopt | elaborate | clarify | escalate
 taskforge-explore/     Decisions; decomposition into children

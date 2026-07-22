@@ -1,16 +1,16 @@
-# TaskForge — Engineering Handoff
+# taskforge-skills — Engineering Handoff
 
 **To:** the next owner (a fresh Claude Code session or human engineer)
 **Scope:** everything needed to continue this project without access to prior discussions.
-**Package:** `taskforge-skills-v2/` (this document lives at its root). Companion validation repo: `demo-wordstats/`.
+**Package:** `taskforge-skills/` (this document lives at its root). Companion validation repo: `demo-wordstats/`.
 
 ---
 
 ## 1. Executive Summary
 
-**TaskForge is a Claude Code Skills framework that implements an AI engineering workflow.** It is not an application, daemon, or orchestrator. It is a set of five skills plus a deterministic engine that can be dropped into any repository, under which every piece of engineering work becomes a durable **Task** that moves through the workflow by **derived readiness** rather than by a controller.
+**taskforge is an Agent Skills framework that implements an AI engineering workflow.** It is not an application, daemon, or orchestrator. It is a set of five skills plus a deterministic engine that can be dropped into any repository, under which every piece of engineering work becomes a durable **Task** that moves through the workflow by **derived readiness** rather than by a controller.
 
-**The problem it solves.** LLM-driven engineering fails in characteristic ways: work evaporates when a session ends; scope silently expands mid-implementation; specifications get invented, inflated, or ignored; the same model that wrote the code grades the code; and state transitions (versioning, invalidation, blocking) get "remembered" inconsistently by a probabilistic system. TaskForge makes work durable, scope-disciplined, independently reviewed, and mechanically consistent.
+**The problem it solves.** LLM-driven engineering fails in characteristic ways: work evaporates when a session ends; scope silently expands mid-implementation; specifications get invented, inflated, or ignored; the same model that wrote the code grades the code; and state transitions (versioning, invalidation, blocking) get "remembered" inconsistently by a probabilistic system. taskforge makes work durable, scope-disciplined, independently reviewed, and mechanically consistent.
 
 **The philosophy, which governs every component:**
 
@@ -168,7 +168,7 @@ Preserve these; they are the project's identity.
 ## 8. Repository Map
 
 ```
-taskforge-skills-v2/
+taskforge-skills/
 ├── HANDOFF.md                  ← this document
 ├── DESIGN.md                   the design contract; §10 = decision history incl. overturns
 ├── README.md                   install, operations, judgment-trial protocol
@@ -211,7 +211,7 @@ Command surface (all JSON output): `create · show · list [--readiness] · read
 
 You are a fresh Claude Code session. Do exactly this, in order:
 
-1. **Install and verify (10 min).** Copy the five skill directories into `~/.claude/skills/` (or the project's `.claude/skills/`). Run `python3 taskforge-core/tests/../tests`… precisely: from the package root, `python3 -m unittest discover taskforge-core/tests`. Expect **42 OK**. Then in a scratch directory: `python3 <resolved>/tasks.py create --title smoke --description smoke` and `... doctor` (expect clean). If anything fails, stop and fix before proceeding — the engine is the foundation of everything else.
+1. **Install and verify (10 min).** Install the five skills with `npx skills add hashirventhodi/taskforge-skills` (or copy the directories into your agent's skills directory). From the package root run `python3 -m unittest discover taskforge-core/tests`. Expect **41 OK**. Then in a scratch directory: `python3 <resolved>/tasks.py create --title smoke --description smoke` and `... doctor` (expect clean). If anything fails, stop and fix before proceeding — the engine is the foundation of everything else.
 2. **M4 step (a): prove reviewer isolation with the real Task tool (the single highest-value experiment).** In a small real repo (reuse `demo-wordstats` or equivalent): create one well-written task, refine (expect ADOPT), implement per `taskforge-run/SKILL.md` — and at the review step, actually spawn a **Task-tool subagent** with the recorded prompt. Then run `audit-review` and confirm clean. Success ends the project's largest declared deviation. Failure modes to watch: the subagent receiving ambient context beyond the prompt; malformed reviewer JSON (exercise the one-re-ask rule).
 3. **M4 step (b): the ten-task judgment trial.** Author ten tasks: six well-written (the adopt-inflation trap), two vague-but-directional (elaborate), one requiring external input (clarify), one genuine approach fork (escalate). Run each through natural user phrasing (this simultaneously measures triggering). Grade against the pass criteria in `README.md`. Record results in `examples/` as `judgment-trial-1.md`.
 4. **Only then** iterate prompt text on failures (skill-creator methodology), and only after M4 concludes, start M5.

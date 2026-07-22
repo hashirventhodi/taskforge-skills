@@ -1,6 +1,6 @@
 # taskforge-skills — Design Document
 
-A production-quality Claude Code Skills framework implementing the durable-Task
+A production-quality Agent Skills framework implementing the durable-Task
 engineering workflow. This document is the contract for the implementation;
 §10 records the critical review of the initial design and the revisions it
 forced, and the rest of the document is written **post-revision** (the final
