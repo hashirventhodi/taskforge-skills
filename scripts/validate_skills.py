@@ -14,6 +14,7 @@ Checks, per skill directory:
   * `name` and `description` exist and are strings
   * `name` is lowercase/digits/hyphens and matches its directory
   * `description` is within the 1024-character budget
+  * `license` is declared and is MIT (skills ship detached from LICENSE)
   * names are unique across the repo
   * the main `taskforge` skill ships alongside the skills that resolve through it
 
@@ -142,6 +143,16 @@ def check_skill(skill_md):
             % (len(description), MAX_DESCRIPTION))
     elif not description.strip():
         errors.append("'description' is empty")
+
+    # Skills are distributed individually and travel detached from the repo's
+    # LICENSE file, so each must declare its own license in frontmatter.
+    license_ = data.get("license")
+    if license_ is None:
+        errors.append("missing 'license' — each skill ships detached from the "
+                      "repo LICENSE, so it must declare its own (e.g. MIT)")
+    elif license_ != "MIT":
+        errors.append("'license' is %r; this project's skills are MIT"
+                      % (license_,))
 
     return (name if isinstance(name, str) else None), errors
 

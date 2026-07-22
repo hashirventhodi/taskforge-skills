@@ -1,6 +1,7 @@
 ---
 name: taskforge-run
 description: Implement a taskforge task against its active Specification and verify it with an independent fresh-context review subagent. Use when a task's readiness is "run", or when the user asks to run, implement, execute, build, or ship a taskforge task that has a specification. Covers the implement-review-retry loop, recorded-and-auditable reviewer isolation, root-cause escalation back to taskforge-refine or taskforge-explore, and scope discipline (out-of-scope discoveries become follow-up tasks). Tasks without an active specification route to taskforge-refine instead.
+license: MIT
 ---
 
 # taskforge-run

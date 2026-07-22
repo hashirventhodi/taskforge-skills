@@ -192,6 +192,26 @@ class TestNoHardcodedTestCount(unittest.TestCase):
                          f"engine suite' instead: {hits}")
 
 
+class TestSkillLicenses(unittest.TestCase):
+    """Every distributed skill declares `license: MIT` in frontmatter — it
+    ships detached from the repo LICENSE. (The frontmatter validator also
+    enforces this; the guard here keeps it a stated repo invariant.)"""
+
+    LICENSE_RE = re.compile(r'^license:\s*(.+?)\s*$', re.MULTILINE)
+
+    def test_every_skill_declares_mit(self):
+        for skill in SKILL_FILES:
+            head = read(skill).split("---", 2)
+            self.assertGreaterEqual(len(head), 3,
+                                    f"{skill.relative_to(ROOT)}: no frontmatter")
+            m = self.LICENSE_RE.search(head[1])
+            self.assertIsNotNone(
+                m, f"{skill.relative_to(ROOT)}: missing 'license' in frontmatter")
+            self.assertEqual(m.group(1), "MIT",
+                             f"{skill.relative_to(ROOT)}: license is "
+                             f"{m.group(1)!r}, expected MIT")
+
+
 class TestUntrustedTextFileForm(unittest.TestCase):
     """The P0 injection fix: source-derived text uses the file form. Guards
     against a doc example regressing to inline --title/--description."""

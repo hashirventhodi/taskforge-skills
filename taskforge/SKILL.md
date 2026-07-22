@@ -1,6 +1,7 @@
 ---
 name: taskforge
 description: The primary entry point for the taskforge engineering workflow - create and import tasks, query and manage the backlog, route work, and unblock humans. Use whenever the user wants to add or import work ("add a task", "import issue #42", "track this bug", "turn these notes into tasks") or asks about tasks and the backlog ("what tasks are ready", "show the backlog", "task status", "what's next", "why is TASK-x stuck", "unblock TASK-x", "check the task store"). Routes to taskforge-refine (specification), taskforge-explore (decisions), and taskforge-run (implementation) but never executes them itself. Also home of the shared contracts, engine, and templates every taskforge skill uses.
+license: MIT
 ---
 
 # taskforge

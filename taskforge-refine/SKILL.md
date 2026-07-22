@@ -1,6 +1,7 @@
 ---
 name: taskforge-refine
 description: The universal entry point of the taskforge workflow - assess whether a task is executable and produce its Specification, or route it. Use whenever the user says to refine, spec, scope, groom, or prepare a taskforge task, asks "what's next for TASK-x", or wants to move a new task forward - and whenever a task's readiness is "refine" (including after escalations or invalidation cascades). Four modes - adopt a well-written task nearly verbatim, elaborate an underspecified one, generate blocking clarification prerequisites, or escalate to taskforge-explore for an architectural decision.
+license: MIT
 ---
 
 # taskforge-refine

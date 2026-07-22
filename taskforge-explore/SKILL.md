@@ -1,6 +1,7 @@
 ---
 name: taskforge-explore
 description: Produce an engineering Decision for a taskforge task - chosen approach, real alternatives with rejection reasons, trade-offs, risks - and optionally decompose large work into child tasks. Use when a task's readiness is "explore" (an escalation is pending from refine, run, or a child task), or when the user explicitly asks to explore, architect, decide an approach for, or break down a taskforge task. Not for writing specifications (taskforge-refine) or implementing (taskforge-run).
+license: MIT
 ---
 
 # taskforge-explore
