@@ -1,0 +1,16 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "artifacts": [{
+    "kind": "decision",
+    "payload": {
+      "chosen_approach": "the answer this research reached (may be 'do not build X')",
+      "rationale": "in terms of THIS codebase and its constraints",
+      "alternatives": [{"approach": "", "rejected_because": "falsifiable claim"}],
+      "trade_offs": [""],
+      "risks": [""]
+    }
+  }],
+  "signal": "block_on_human",
+  "signal_reason": "DECISION IS THE DELIVERABLE — this task was created to reach a direction, not to be specified. It does not proceed to refine on its own; the human disposes it.\n\nRECOMMENDED DISPOSITION (pick one):\n  - close: the answer above is the deliverable; nothing to build\n  - spawn independent work then close: file the follow-up task(s) below as backlog\n  - continue: specify and build this as one task\n\nFOLLOW-UP WORK (only if recommending 'spawn'; a finding is not a task):\n  1. <title> — <issue-quality description>\n\nRECOMMENDATION: <which disposition, and why — enough for a one-message answer>",
+  "notes": "decision recorded; research deliverable parked for human disposition"
+}

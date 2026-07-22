@@ -42,6 +42,12 @@ python3 $SCRIPT create --title-file /tmp/title.txt \
 
 Batch = one create per item; collect ids from output.
 
+Add `--explore` for a **research topic** (the hub's `explore <topic>`): the
+task initializes the existing pending-explore flag and routes to
+`taskforge-explore` for a Decision instead of to refine. A short topic you
+composed yourself may use the inline `--title`/`--description` forms; the file
+forms stay mandatory for any source-derived text.
+
 ## 4. Stated relationships only
 
 If the source *explicitly* states a relationship ("blocked by #41",
@@ -54,7 +60,9 @@ tasks for out-of-store references.
 ## 5. Report
 
 Per `references/reporting.md`. A new task's readiness is `refine` unless it
-arrived with blockers; name `taskforge-refine` as next and stop.
+arrived with blockers (`waiting`) or was created `--explore` (`explore`); name
+the skill that readiness points to — `taskforge-refine`, or `taskforge-explore`
+for a research topic — and stop.
 
 ## Quality bar
 

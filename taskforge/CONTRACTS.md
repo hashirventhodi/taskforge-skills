@@ -127,17 +127,18 @@ Required payload fields (engine-validated):
 ## Readiness (derived, never assigned)
 
 ```
-terminal status                        → terminal
-unresolved blocked_by (cycle → human)  → waiting
-pending explore escalation             → explore
-no active specification                → refine
-otherwise                              → run
+terminal status                          → terminal
+unresolved blocked_by (cycle → human)    → waiting
+pending explore flag (escalation/intake) → explore
+no active specification                  → refine
+otherwise                                → run
 ```
 
 **Guard first, always**: `python3 $SCRIPT readiness <id>`. If it doesn't
 name your skill, report the actual state and which skill the task needs —
-never run out of turn. Explore is reached only by explicit escalation (or an
-explicit, confirmed user request), never inferred from absence.
+never run out of turn. Explore is reached only by an **explicit set** of the
+pending-explore flag — a refine/run `escalate_explore`, or `explore <topic>`
+intake (`create --explore`) — never inferred from a merely-absent decision.
 
 ## The result contract
 
@@ -234,6 +235,15 @@ human approves via `human-update` (actor `human`, capabilities `*`), which
 commits the chosen children/edges. Reasoning and recommendation are
 autonomous; changing the graph — which creates durable work for other tasks
 and people — requires human approval.
+
+The same human checkpoint also owns a task's **completion** when Explore's
+Decision is the deliverable (a research topic — `explore <topic>`): the human
+closes it `done` (the Decision preserved, via the human's review-gate
+exemption), files independent follow-ups then closes, or continues it to
+refine. Whether a Decision *ends* or *continues* a task is a judgment, never a
+deterministic property, so it is the human's — made here, not the engine's
+(DESIGN §10.14). Explore itself completes only the one autonomous route: an
+escalation fork whose Decision spawns no work routes straight to refine.
 
 **Never auto-execute:** applying your result ends your authority. Report
 what was generated and each task's readiness; the human (or an explicit

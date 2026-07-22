@@ -28,7 +28,7 @@ taskforge/             the primary entry point + shared SDK
   templates/           result.json skeletons per skill/mode
   tests/               stdlib unittest suite for the engine
 taskforge-refine/      universal entry: adopt | elaborate | clarify | escalate
-taskforge-explore/     Decisions; decomposition into children
+taskforge-explore/     Decisions; proposes decomposition + research disposition
 taskforge-run/         implement + recorded, auditable fresh-context review
 DESIGN.md              the design document, incl. critical review (§10)
 ```
@@ -59,6 +59,10 @@ the agent invokes them. In an agent session in your repo:
 
 - **Add work:** *"add a task: make the export button also support CSV"* →
   `taskforge` captures it (readiness `refine`).
+- **Or start with research:** *"explore whether we should move to ClickHouse"*
+  → `taskforge explore <topic>` opens a task whose deliverable is a Decision
+  (readiness `explore`); `taskforge-explore` decides, then you dispose it —
+  close it, spawn the work, or continue.
 - **Refine it:** *"what's next for that task?"* → `taskforge-refine` turns it
   into a specification (or asks a blocking question, or escalates a genuine
   architectural fork to `taskforge-explore`).

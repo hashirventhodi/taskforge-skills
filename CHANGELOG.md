@@ -6,6 +6,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-22
+
+First-class **Explore**: two changes that together make Explore a stage, not
+just an escalation from Refine — the human owns the *work graph* and the
+decision to *stop*. The engine's conceptual surface is unchanged (no new
+readiness value, stage, terminal, primitive, or stored field — only an
+existing field, now initializable at intake). The line held throughout: the
+engine enforces deterministic mechanics; AI reasons; humans own topology and
+completion judgments. **Contains a breaking change — see Migration.** Design
+rationale: DESIGN §10.13–§10.14.
+
+### Added — first-class Explore: research entry + human disposition
+- **Explore is now a first-class stage, not only an escalation from Refine.**
+  A user can start with research whose deliverable is a *Decision* (which may
+  or may not lead to implementation): `taskforge explore <topic>` intakes an
+  ordinary task with the existing pending-explore flag set at creation
+  (`create --explore`), so derived readiness routes it to `taskforge-explore`.
+  No new readiness value, no new terminal, no new engine primitive, and no
+  schema change beyond initializing a field — the "explicit user request"
+  branch the readiness guard always named, now a real engine state
+  (DESIGN §10.14).
+- **The Explore protocol routes on provenance, in one explicit rule:** the
+  only autonomous route is an *escalation fork whose Decision spawns no work*
+  (→ refine); every other outcome parks `blocked_on_human` for the human. A
+  research topic's Decision never drops into Refine on its own.
+- **The human disposes a parked research Decision** with a `human-update`
+  (actor `human`): **close** (`signal: done` — a decided-not-to-build task is
+  a first-class `done` with a recorded Decision, via the human's review-gate
+  exemption), **spawn independent work then close**, or **continue** to refine
+  with the Decision binding. New `templates/explore-dispose.json`; the Hub
+  renders the disposition menu. Completion meaning is the human's judgment at
+  the checkpoint, never a stored task attribute.
+
 ### Changed — Explore: topology requires human approval (breaking, pre-1.0)
 - **A skill may autonomously change a task's *contents*, but not the
   *topology* of the work graph** (child tasks, backlog tasks, dependency
@@ -25,6 +58,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `result.edges` were ungated for every actor. Annotation edges
   (`relates_to`) stay ungated (metadata, not topology).
 - `run`'s `follow_up` behavior is deliberately **unchanged** (usage-first).
+
+### Migration (from 0.3.0)
+- **Re-install** so the engine and all four skills move together:
+  `npx skills add hashirventhodi/taskforge-skills`. The breaking change is
+  Explore's capabilities (it can no longer create tasks or dependency edges);
+  it is enforced engine-side and skills + engine install as a set, so there is
+  no partial-upgrade window.
+- **Existing `.tasks/` stores are untouched.** §10.13 is a capability change
+  (what an actor may commit going forward), not a storage change, and §10.14
+  only *initializes* an existing field at intake — a store written by 0.3.0 is
+  schema-1 and is read, routed, and continued with no migration step
+  (verified). `tasks.py migrate` remains a no-op at this schema version.
 
 ## [0.3.0] - 2026-07-22
 
@@ -192,7 +237,8 @@ into a stable foundation. **Contains breaking changes — see Migration.**
 - Recorded, auditable reviewer isolation (`audit-review`).
 - 41-test engine suite.
 
-[Unreleased]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hashirventhodi/taskforge-skills/releases/tag/v0.1.0

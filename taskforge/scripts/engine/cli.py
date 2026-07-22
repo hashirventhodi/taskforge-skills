@@ -71,6 +71,10 @@ def build_parser():
                    choices=["manual", "github", "jira", "markdown",
                             "document", "internal"])
     c.add_argument("--source-ref")
+    c.add_argument("--explore", action="store_true",
+                   help="intake as a research topic: initialize the pending "
+                        "explore flag so readiness routes to explore for a "
+                        "Decision before any specification")
 
     for name in ("show", "readiness", "budget", "blocked-by", "audit-review"):
         sub.add_parser(name).add_argument("id")
@@ -135,9 +139,16 @@ def run_command(args):
         with store.store_lock():
             store.ensure_config_file()
             t = new_task(title, desc, args.source_type, args.source_ref)
-            record(t, "created", "taskforge",
-                   detail={"source": args.source_type,
-                           "reference": args.source_ref})
+            detail = {"source": args.source_type, "reference": args.source_ref}
+            if args.explore:
+                # Intake initializes the existing pending-explore flag. This is
+                # the "explicit user request" branch of readiness — a research
+                # topic that must reach a Decision before any specification.
+                # Recorded on the created event so Explore can read its
+                # provenance (intake vs. a refine/run escalation).
+                t["pending_escalation"] = "explore"
+                detail["pending_escalation"] = "explore"
+            record(t, "created", "taskforge", detail=detail)
             readiness.refresh_status(t)
             store.save(t)
         out(summary(t))

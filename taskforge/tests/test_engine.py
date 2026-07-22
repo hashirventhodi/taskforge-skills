@@ -1360,3 +1360,134 @@ class TestM3Findings(Base):
         b = _json.loads(buf.getvalue())
         self.assertEqual(b["total_reviews"], 1)
         self.assertEqual(b["next_review_version"], 2)
+
+
+class TestExploreIntake(Base):
+    """Intake can initialize the existing pending-explore flag (`--explore`).
+
+    First-class Explore: a research topic enters as an ordinary task whose
+    pending_escalation is set at creation, so derived readiness routes it to
+    `explore` for a Decision before any specification exists. No new field and
+    no new readiness value — the same flag a refine/run escalation sets, set
+    one step earlier and without a decision to supersede. The created event
+    carries the flag so Explore can read its provenance (intake vs. an
+    escalation) without any stored task "type".
+    """
+
+    def cli(self, argv):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(argv)
+        return json.loads(buf.getvalue())
+
+    def test_explore_intake_routes_to_explore(self):
+        s = self.cli(["create", "--title", "OAuth strategy",
+                      "--description", "which provider and flow", "--explore"])
+        self.assertEqual(s["pending_escalation"], "explore")
+        self.assertEqual(s["readiness"], "explore")
+        # Persisted, not just echoed: a fresh load re-derives the same route.
+        self.assertEqual(
+            tasks.evaluate(tasks.load(s["id"]))["readiness"], "explore")
+
+    def test_plain_intake_still_routes_to_refine(self):
+        # Teeth: without --explore the flag stays None and routing is the
+        # universal entry point, refine. Reverting the create-handler change
+        # collapses the two cases and fails test_explore_intake_routes_*.
+        s = self.cli(["create", "--title", "add logout",
+                      "--description", "a logout button"])
+        self.assertIsNone(s["pending_escalation"])
+        self.assertEqual(s["readiness"], "refine")
+
+    def test_explore_intake_records_provenance(self):
+        s = self.cli(["create", "--title", "migrate?",
+                      "--description", "should we move to ClickHouse",
+                      "--explore"])
+        created = [e for e in tasks.load(s["id"])["history"]
+                   if e["type"] == "created"]
+        self.assertEqual(created[-1]["detail"].get("pending_escalation"),
+                         "explore")
+
+
+class TestExploreDisposition(Base):
+    """First-class Explore, end to end: a research topic reaches a Decision
+    and the human disposes it — close, spawn-and-close, or continue. Every
+    disposition is a `human-update` as the `human` actor over existing
+    mechanics; there is no new terminal, no new readiness value, and no stored
+    task "type" — the completion meaning is the human's call at the park.
+    """
+
+    def cli(self, argv):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(argv)
+        return json.loads(buf.getvalue())
+
+    def write(self, name, content):
+        p = Path(self.dir) / name
+        p.write_text(content, encoding="utf-8")
+        return str(p)
+
+    def parked_with_decision(self):
+        """Intake --explore → readiness explore → explore records a Decision
+        and parks blocked_on_human for the human to dispose (the research
+        deliverable shape)."""
+        s = self.cli(["create", "--title", "migrate to ClickHouse?",
+                      "--description", "evaluate the move", "--explore"])
+        t = tasks.load(s["id"])
+        self.assertEqual(tasks.evaluate(t)["readiness"], "explore")
+        self.apply(t, {"artifacts": [{"kind": "decision",
+                    "payload": decision_payload("stay on Postgres")}],
+                    "signal": "block_on_human",
+                    "signal_reason": "decision is the deliverable; close"},
+                   "explore")
+        t = self.reload(t)
+        self.assertEqual(t["status"], "blocked_on_human")
+        # Recording the Decision cleared the flag, so a later "continue"
+        # re-derives to refine rather than looping back to explore.
+        self.assertIsNone(t["pending_escalation"])
+        return t
+
+    def test_close_disposition_preserves_the_decision(self):
+        t = self.parked_with_decision()
+        nf = self.write("n.txt", "close it — decided no")
+        rf = self.write("r.json", json.dumps({"signal": "done"}))
+        self.cli(["human-update", t["id"], "--note-file", nf, rf])
+        t = self.reload(t)
+        # A decided-not-to-build research task is a first-class `done` with a
+        # recorded Decision — the human's review-gate exemption, not a cancel.
+        self.assertEqual(t["status"], "done")
+        self.assertEqual(
+            tasks.active(t, "decision")["payload"]["chosen_approach"],
+            "stay on Postgres")
+
+    def test_spawn_then_close_files_backlog_and_closes(self):
+        t = self.parked_with_decision()
+        nf = self.write("n.txt", "adopt it; file the work")
+        rf = self.write("r.json", json.dumps({
+            "generated_tasks": [{"title": "adopt ClickHouse for analytics",
+                                 "description": "stand up the pipeline",
+                                 "relation": "follow_up",
+                                 "reason": "from the research decision"}],
+            "signal": "done"}))
+        self.cli(["human-update", t["id"], "--note-file", nf, rf])
+        t = self.reload(t)
+        self.assertEqual(t["status"], "done")
+        spawned = [x for x in store.all_tasks() if x["id"] != t["id"]]
+        self.assertEqual(len(spawned), 1)
+        # Independent backlog: it does not block on the closed research task,
+        # and routes to the universal entry point.
+        self.assertEqual(tasks.evaluate(spawned[0])["readiness"], "refine")
+
+    def test_continue_disposition_routes_to_refine_with_decision_binding(self):
+        t = self.parked_with_decision()
+        nf = self.write("n.txt", "actually, build it as one task")
+        # Note only: the answer becomes work; the task re-enters and readiness
+        # re-derives from what it holds (a Decision, no spec) → refine.
+        self.cli(["human-update", t["id"], "--note-file", nf])
+        t = self.reload(t)
+        self.assertEqual(tasks.evaluate(t)["readiness"], "refine")
+        self.assertIsNotNone(tasks.active(t, "decision"))

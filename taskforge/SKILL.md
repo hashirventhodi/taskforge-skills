@@ -20,8 +20,9 @@ work. Resolve the engine per its "Locating the engine" section; below,
 
 Every piece of work is a durable Task in `.tasks/`. Tasks route by **derived
 readiness**: no active specification → `taskforge-refine` (the universal
-entry point: adopt / elaborate / clarify / escalate); a pending escalation →
-`taskforge-explore` (decisions, optional decomposition into children); an
+entry point: adopt / elaborate / clarify / escalate); a pending explore flag —
+set by an escalation, or at intake for a research topic (`explore <topic>`) →
+`taskforge-explore` (a Decision, optionally proposing decomposition); an
 active spec and no blockers → `taskforge-run` (implement + independent
 fresh-context review). Skills reason and emit results; the engine applies
 them — versioning, cascades, relationships, budgets, readiness. Nothing is
@@ -35,8 +36,9 @@ the next skill; it never runs it.
 
 | command | intent | how |
 |---|---|---|
-| *(none)* / `status` | overview | `list`; counts per readiness. Split the `blocked_on_human` tasks into **awaiting approval** (a `human_blocked` event proposing topology — see Approving) and **blocked on an answer**, and surface each with its question |
+| *(none)* / `status` | overview | `list`; counts per readiness. Split the `blocked_on_human` tasks into **awaiting the human's call** (a `human_blocked` event from explore — a topology proposal or a research deliverable to dispose; see Disposing) and **blocked on an answer** (a question), and surface each with its prompt |
 | `add <source…>` | create/import tasks | follow `references/intake.md` |
+| `explore <topic>` | start a research task | intake per `references/intake.md` with `--explore` — routes to `taskforge-explore` for a Decision, not to refine |
 | `backlog` | full list | `python3 $SCRIPT list` (filter: `--readiness refine\|explore\|run\|waiting\|terminal\|human`) |
 | `next` | what should happen now | `list --readiness run`, else `refine`/`explore`; name the task(s) and the skill each needs |
 | `show <id>` | full detail + history | `python3 $SCRIPT show TASK-x` |
@@ -52,8 +54,9 @@ the next skill; it never runs it.
 
 When answering `why`: quote `readiness` (its `reason`, `blocking_ids`, or
 `cycle`), then the last few relevant history events. For `blocked_on_human`,
-surface the `human_blocked` event's reason — a **topology proposal** from
-explore (see Approving) or a question awaiting an answer.
+surface the `human_blocked` event's reason — an explore **proposal to dispose**
+(topology or a research deliverable; see Disposing) or a question awaiting an
+answer.
 
 ## Human unblocking
 
@@ -70,30 +73,44 @@ human dictated the spec); otherwise the note alone re-enters the task and
 readiness routes it. After either command, report new readiness and name the
 next skill — do not execute it.
 
-## Approving a topology proposal
+## Disposing a parked explore
 
-`taskforge-explore` may change a task's **contents** (its decision) but not
+`taskforge-explore` may change a task's **contents** (its Decision) but never
 the **topology** of the work graph (child tasks, backlog tasks, dependency
-edges) — that requires human approval (CONTRACTS → "Topology"). When explore
-proposes topology it records the decision and parks the task
-`blocked_on_human` with the proposal in the `human_blocked` event's reason.
+edges) or a task's **completion** — those are the human's (CONTRACTS →
+"Topology"). So explore records its Decision and parks the task
+`blocked_on_human` with a proposal in the `human_blocked` event's reason. Two
+shapes arrive here; both are disposed the same way — a `human-update` **as the
+human** (actor `human`, capabilities `*`). Render the proposal, get the
+human's call, then commit it.
 
-Render the proposal and get the human's call per item — approve the
+**Topology proposal** — the Decision spawns work. Per item: approve the
 decomposition (or adjust it), and for each finding **promote to backlog ·
-note only · ignore**. Then commit the approved topology **as the human**:
-write the chosen children (`relation: child`) and any promoted findings
-(`relation: follow_up`) into a `result.json`, and
+note only · ignore**. Write the chosen children (`relation: child`) and any
+promoted findings (`relation: follow_up`) into a `result.json`:
 
 ```bash
 python3 $SCRIPT human-update TASK-x --note-file /tmp/approval.txt result.json
 ```
 
-The engine wires the children, pins each to explore's decision, and re-routes
-the parent (`waiting` while children are open). The human is the actor of
-record; explore's proposal stays in history. If the human rejects the
-*decision itself* (not just its topology), route to a re-exploration instead
-of committing children. Never create the topology on explore's behalf without
-the human's approval.
+The engine wires the children, pins each to explore's Decision, and re-routes
+the parent (`waiting` while children are open).
+
+**Research deliverable** — the Decision is the answer; nothing to build. Pick
+the disposition the human chooses; each is one `human-update`:
+
+| disposition | `result.json` | outcome |
+|---|---|---|
+| **close** | `{"signal": "done"}` | task `done`, its Decision preserved as the deliverable |
+| **spawn + close** | `{"generated_tasks": [{…, "relation": "follow_up"}], "signal": "done"}` | independent backlog filed `generated_from` it; task `done` |
+| **continue** | *(note only, no result.json)* | re-enters → `refine`, the Decision binding input |
+
+`done` here is the human's, exempt from the review gate: a research topic that
+decided *not* to build is a first-class `done` with a recorded Decision, not a
+`cancel`. The human is the actor of record; explore's proposal stays in
+history. If the human rejects the **Decision itself** (not its disposition),
+route to a re-exploration instead. Never create topology, or close or continue
+a task, on explore's behalf without the human's call.
 
 ## Reopening a closed task
 

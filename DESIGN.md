@@ -696,3 +696,57 @@ mechanism: Squad gates by a synchronous prompt convention (`AskUserQuestion`,
 no engine to enforce it); TaskForge gates by a durable, engine-enforced
 capability (`block_on_human` + deny-by-default), so the boundary holds
 whether or not a human is in the session and whatever a model chooses to do.
+
+### v0.4.x — §10.14 first-class Explore (research entry + disposition)
+
+**§10.13 gave Explore a proposal gate; this makes Explore a first-class
+stage.** Real use surfaced that Explore is not only an escalation *from*
+Refine — a user legitimately starts with research ("should we migrate to
+ClickHouse?", "how should OAuth work?") whose deliverable is a **Decision**,
+which may or may not lead to implementation. The design question was whether
+first-class Explore needs new engine machinery. It does not.
+
+The tempting abstraction — a per-task **target artifact** (this task aims at a
+Decision vs. an Implementation) — was considered and rejected: it enlarges the
+engine's conceptual surface and, worse, moves a *judgment* ("is this task's
+work done, or does it continue?") into the engine, the exact category error
+the topology invariant avoids. The model that survived pressure-testing keeps
+the surface unchanged: **the engine never learns whether a task is "research"
+or "work." It enforces deterministic mechanics; the *meaning* of a Decision —
+whether it ends, continues, or spawns a task — is a human judgment made at the
+existing `block_on_human` checkpoint.**
+
+Concretely, everything reuses primitives:
+
+- **Entry.** Intake initializes the existing `pending_escalation` flag
+  (`create --explore`, surfaced as the Hub's `explore <topic>`). Derived
+  readiness already routes a flagged task to `explore`; this is the "explicit
+  user request" branch the readiness guard always named, now a real engine
+  state instead of Explore running out of turn. It is a strict subset of an
+  `escalate_explore` signal (set the flag; nothing to supersede at intake) —
+  no schema change beyond initializing a field, no new readiness value, no new
+  terminal, no capability change (intake is not a result-apply).
+- **Provenance.** Explore reads its own history — an `escalated` event means a
+  fork in existing work; its absence (flag set at `created`) means a research
+  topic. This is the one place meaningful judgment lives, so it is a single
+  explicit branch, not a pile of heuristics: **the only autonomous route is an
+  escalation fork whose Decision spawns no work (→ refine); everything else
+  parks for the human.** A misjudgment is backstopped, never silent — a
+  research "no" wrongly routed to Refine finds nothing to specify and blocks
+  for the human.
+- **Disposition.** At the park, the human disposes with a `human-update`
+  (actor `human`): **close** (`signal: done` — a decided-not-to-build task is
+  a first-class `done` with a recorded Decision, using the human's existing
+  review-gate exemption), **spawn + close** (`follow_up` tasks then `done`),
+  **continue** (note only → the cleared flag re-derives to `refine` with the
+  Decision binding), or the §10.13 topology commit. Completion semantics
+  differ by *disposition*, not by a stored task attribute.
+
+**Accepted residual:** "a research Decision must not drop into Refine" is
+Explore-protocol behavior plus the human backstop, not an engine invariant —
+consistent with the philosophy (deterministic mechanics in the engine,
+judgment in the prompt/human). **Deferred (cosmetic):** `pending_escalation`
+now means "a pending route to Explore, set by escalation *or* intake"; the
+name is narrower than the meaning, but a rename is a stored-field schema
+migration not worth its cost now — documented broader, revisited at a future
+schema revision.
