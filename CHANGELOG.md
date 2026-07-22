@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-22
+
+The architectural-hardening release: the four Tier 1–2 findings from the
+v0.2.0 architecture review, each closed as a stated engine invariant —
+durability, concurrency, compatibility, and evolution — plus a declared
+public API that is deliberately *smaller* than before. See
+[`docs/reviews/v0.2.0-architecture-review.md`](docs/reviews/v0.2.0-architecture-review.md).
+
 ### Added
 - **`docs/PUBLIC_API.md` — the public stability contract** (review finding
   T2-3, [#3](https://github.com/hashirventhodi/taskforge-skills/issues/3)).
@@ -164,6 +172,7 @@ into a stable foundation. **Contains breaking changes — see Migration.**
 - Recorded, auditable reviewer isolation (`audit-review`).
 - 41-test engine suite.
 
-[Unreleased]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hashirventhodi/taskforge-skills/releases/tag/v0.1.0
