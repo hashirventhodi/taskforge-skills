@@ -97,6 +97,11 @@ def build_parser():
     x.add_argument("--reason")
     x.add_argument("--reason-file")
 
+    ro = sub.add_parser("reopen")
+    ro.add_argument("id")
+    ro.add_argument("--reason")
+    ro.add_argument("--reason-file")
+
     r = sub.add_parser("record-review-prompt")
     r.add_argument("id")
     r.add_argument("file")
@@ -197,7 +202,13 @@ def run_command(args):
             t["status"] = "cancelled"
             record(t, "cancelled", "human", reason=reason)
             store.save(t)
-            apply_mod.wake_blocked_by(t["id"])
+            apply_mod.refresh_dependents(t["id"])
+        out(summary(t))
+
+    elif args.cmd == "reopen":
+        reason = text_arg(args.reason, args.reason_file, "reason")
+        with store.store_lock():
+            t = apply_mod.reopen(store.load(args.id), reason)
         out(summary(t))
 
     elif args.cmd == "record-review-prompt":

@@ -43,6 +43,7 @@ the next skill; it never runs it.
 | `budget <id>` | review-retry budget | `python3 $SCRIPT budget TASK-x` |
 | `unblock <id>` | human answered | see Human unblocking |
 | `cancel <id>` | close without doing | `python3 $SCRIPT cancel TASK-x --reason "…"` (`--reason-file` when quoting the user), then sync per `references/sync.md` |
+| `reopen <id>` | restore a closed task | `python3 $SCRIPT reopen TASK-x --reason "…"`; see Reopening |
 | `sync <id>` | tracker sync-back | `references/sync.md` |
 | `doctor` | store integrity | see Maintenance |
 | `audit <id>` | reviewer isolation | `python3 $SCRIPT audit-review TASK-x` |
@@ -67,6 +68,25 @@ Attach a result.json only if the answer translates into artifacts (e.g. the
 human dictated the spec); otherwise the note alone re-enters the task and
 readiness routes it. After either command, report new readiness and name the
 next skill — do not execute it.
+
+## Reopening a closed task
+
+`done` and `cancelled` are **history-preserving** terminals, not deletions —
+reopen brings either back into active work:
+
+```bash
+python3 $SCRIPT reopen TASK-x --reason "why it's back" [--reason-file …]
+```
+
+Reopen keeps every artifact, review, decision, and history event; it only
+lifts the terminal status and lets readiness **re-derive** where the task
+goes (a preserved spec → `run`; none → `refine`; a pending escalation →
+`explore`; an open blocker → `waiting`). Reopening a task others were
+blocked on re-blocks any still-active dependent. It rejects a task that
+isn't a closed terminal; a `blocked_on_human` task resumes with
+`unblock`/`human-update` instead (that path captures the human's answer).
+After reopening, report the new readiness and name the next skill — don't
+run it.
 
 ## Maintenance
 

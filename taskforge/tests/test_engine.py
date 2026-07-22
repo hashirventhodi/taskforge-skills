@@ -572,6 +572,136 @@ class TestRetryAfterTerminal(Base):
         self.assertEqual(r2["duplicate_of"], "d1")
 
 
+class TestReopen(Base):
+    """Reopen restores a closed terminal (done/cancelled) to active work
+    without losing artifacts, reviews, decisions, or history. Routing is
+    derived from what the task already has — reopen assigns no state."""
+
+    def close(self, task, signal="done"):
+        self.apply(task, {"signal": signal, "signal_reason": "x"}, "human")
+        return self.reload(task)
+
+    def spec(self, task):
+        self.apply(task, {"artifacts": [
+            {"kind": "specification", "payload": spec_payload()}]}, "refine")
+        return self.reload(task)
+
+    def test_done_reopens_to_run_when_spec_present(self):
+        t = self.spec(self.make())
+        t = self.close(t, "done")
+        self.assertEqual(t["status"], "done")
+        t = tasks.reopen(t, "extend the feature")
+        self.assertEqual(tasks.evaluate(t)["readiness"], "run")
+        self.assertNotIn(t["status"], tasks.TERMINAL)
+
+    def test_cancelled_reopens_to_refine_without_spec(self):
+        t = self.close(self.make(), "cancelled")
+        t = tasks.reopen(t, "back on the roadmap")
+        self.assertEqual(tasks.evaluate(t)["readiness"], "refine")
+
+    def test_reopen_preserves_all_artifacts_and_history(self):
+        t = self.spec(self.make())
+        self.apply(t, {"artifacts": [
+            {"kind": "implementation", "payload": impl_payload("SECRET")},
+            {"kind": "review", "payload": review_payload("approved")}],
+            "signal": "done"}, "run")
+        t = self.reload(t)
+        before = json.dumps(t["artifacts"], sort_keys=True)
+        hist_len = len(t["history"])
+        t = tasks.reopen(t, "redo")
+        # Artifacts byte-identical; history only grew (append-only).
+        self.assertEqual(json.dumps(t["artifacts"], sort_keys=True), before)
+        self.assertEqual(tasks.active(t, "implementation")["payload"]["summary"],
+                         "SECRET")
+        self.assertEqual(tasks.active(t, "review")["payload"]["verdict"],
+                         "approved")
+        self.assertEqual(len(t["history"]), hist_len + 1)
+        self.assertEqual(t["history"][-1]["type"], "reopened")
+        self.assertEqual(t["history"][-1]["reason"], "redo")
+
+    def test_reopen_routes_to_explore_with_pending_escalation(self):
+        t = self.make()
+        self.apply(t, {"signal": "escalate_explore",
+                       "signal_reason": "undecided"}, "refine")
+        t = self.reload(t)
+        # Park it terminal, then reopen — the pending escalation survives.
+        t["status"] = "cancelled"
+        tasks.save(t)
+        t = tasks.reopen(t, "revisit")
+        self.assertEqual(tasks.evaluate(t)["readiness"], "explore")
+
+    def test_reopen_rejects_non_terminal(self):
+        t = self.make()
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            tasks.reopen(t, "x")
+        self.assertIn("nothing to reopen", str(ctx.exception))
+
+    def test_reopen_rejects_blocked_on_human_points_to_human_update(self):
+        t = self.make()
+        self.apply(t, {"signal": "block_on_human",
+                       "signal_reason": "conflict"}, "refine")
+        t = self.reload(t)
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            tasks.reopen(t, "x")
+        self.assertIn("human-update", str(ctx.exception))
+
+    def test_second_reopen_errors(self):
+        t = self.close(self.make(), "done")
+        t = tasks.reopen(t, "once")
+        with self.assertRaises(tasks.TaskforgeError):
+            tasks.reopen(t, "twice")
+
+    def test_reopen_reblocks_still_active_dependent(self):
+        blocker = self.make("blocker")
+        dep = self.make("dependent")
+        self.apply(dep, {"edges": [
+            {"type": "blocked_by", "target": blocker["id"]}]}, "human")
+        blocker = self.close(blocker, "done")
+        dep = self.reload(dep)
+        self.assertEqual(tasks.evaluate(dep)["readiness"], "refine")  # freed
+        blocker = tasks.reopen(blocker, "redo the blocker")
+        dep = self.reload(dep)
+        self.assertEqual(tasks.evaluate(dep)["readiness"], "waiting")
+        self.assertEqual(dep["status"], "waiting")
+        self.assertTrue(any(e["type"] == "reblocked"
+                            for e in dep["history"]))
+
+    def test_reopen_leaves_terminal_dependent_untouched(self):
+        blocker = self.make("blocker")
+        dep = self.make("dependent")
+        self.apply(dep, {"edges": [
+            {"type": "blocked_by", "target": blocker["id"]}]}, "human")
+        blocker = self.close(blocker, "done")
+        dep = self.reload(dep)
+        dep["status"] = "done"  # dependent finished on its own
+        tasks.save(dep)
+        blocker = tasks.reopen(blocker, "redo")
+        dep = self.reload(dep)
+        self.assertEqual(dep["status"], "done")  # terminal wins, untouched
+        self.assertFalse(any(e["type"] == "reblocked"
+                             for e in dep["history"]))
+
+    def test_doctor_clean_after_reopen(self):
+        t = self.spec(self.make())
+        t = self.close(t, "done")
+        tasks.reopen(t, "x")
+        self.assertTrue(tasks.doctor()["clean"])
+
+    def test_reopen_via_cli_reason_file(self):
+        import io
+        import contextlib
+        t = self.close(self.make(), "cancelled")
+        rf = Path(self.dir) / "reason.txt"
+        rf.write_text("re-prioritized `now`\n", encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(["reopen", t["id"], "--reason-file", str(rf)])
+        s = json.loads(buf.getvalue())
+        self.assertNotIn(s["status"], tasks.TERMINAL)
+        t = self.reload(t)
+        self.assertEqual(t["history"][-1]["reason"], "re-prioritized `now`")
+
+
 class TestCliFileInputs(Base):
     """File-based free-text flags — the injection-safe input path.
 

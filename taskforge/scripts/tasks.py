@@ -39,7 +39,7 @@ from engine.validation import (                               # noqa: E402,F401
     validate_edge_type, validate_payload, validate_result)
 from engine.apply import (                                    # noqa: E402,F401
     add_artifact, add_edge, apply_result, apply_signal, cascade,
-    flag_stale_decision_refs, materialize, wake_blocked_by)
+    flag_stale_decision_refs, materialize, refresh_dependents, reopen)
 from engine.audit import (                                    # noqa: E402,F401
     audit_review, doctor, migrate, record_review_prompt)
 from engine.cli import build_parser, main, run_command, summary  # noqa: E402,F401

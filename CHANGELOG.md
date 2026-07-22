@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `reopen <id> --reason …` (`--reason-file` too): restores a closed terminal
+  (`done`/`cancelled`) to active work. Nothing is lost — artifacts, reviews,
+  decisions and history are preserved, and readiness re-derives the route
+  from what the task already holds (spec → run, none → refine, pending
+  escalation → explore, open blocker → waiting). Reopening a task others were
+  blocked on re-blocks any still-active dependent; terminal dependents are
+  untouched. `blocked_on_human` is not reopenable — it resumes via
+  `human-update`, which captures the human's answer. (Internal:
+  `wake_blocked_by` → `refresh_dependents`, now symmetric — `unblocked` on
+  close, `reblocked` on reopen.)
+
 ### Security
 - Injection-safe input paths for untrusted free text: `create --title-file`,
   `human-update --note-file`, `cancel --reason-file` (mirroring the existing

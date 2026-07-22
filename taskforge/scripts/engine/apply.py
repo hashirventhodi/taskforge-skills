@@ -50,7 +50,7 @@ def apply_result(task, result, actor):
     refresh_status(task)
     store.save(task)
     if task["status"] in CLOSED:
-        wake_blocked_by(task["id"])
+        refresh_dependents(task["id"])
     return {"task": task["id"], "applied": True,
             "generated_tasks": generated_ids,
             "signal": result.get("signal", "none"),
@@ -242,14 +242,53 @@ def apply_signal(task, signal, reason, actor):
         block_on_human(task, reason or "", {})
 
 
-def wake_blocked_by(closed_id):
+def refresh_dependents(blocker_id):
+    """Re-sync the display-cache status of every non-terminal task
+    blocked_by ``blocker_id``, and log the transition.
+
+    Called when the blocker CLOSES (a waiter may now proceed -> ``unblocked``)
+    and when it REOPENS (a still-open waiter re-blocks -> ``reblocked``).
+    Readiness derives blocker-openness live, so this only keeps the cached
+    status and the history honest — the event fires solely on an actual
+    cache-status transition, and a cycle-parked dependent (blocked_on_human)
+    is labelled by neither (block_on_human already recorded that)."""
     for t in store.all_tasks():
         if t["status"] in TERMINAL \
-                or not has_edge(t, "blocked_by", closed_id):
+                or not has_edge(t, "blocked_by", blocker_id):
             continue
-        ev = evaluate(t)
-        if ev["readiness"] != "waiting":
-            record(t, "unblocked", detail={"blocker": closed_id},
-                   reason=f"blocker {closed_id} closed")
+        was_waiting = t["status"] == "waiting"
         refresh_status(t)
+        now_waiting = evaluate(t)["readiness"] == "waiting"
+        if now_waiting and not was_waiting:
+            record(t, "reblocked", detail={"blocker": blocker_id},
+                   reason=f"blocker {blocker_id} reopened")
+        elif was_waiting and not now_waiting:
+            record(t, "unblocked", detail={"blocker": blocker_id},
+                   reason=f"blocker {blocker_id} closed")
         store.save(t)
+
+
+def reopen(task, reason, actor="human"):
+    """Restore a closed terminal task (done/cancelled) to active work.
+
+    Artifacts, reviews, decisions and history are preserved untouched — the
+    task re-enters the workflow at whatever its derived readiness now says
+    (spec present -> run; none -> refine; pending escalation -> explore; open
+    blocker -> waiting). Reopening a task others were blocked_by re-blocks
+    any still-active dependent. blocked_on_human is not a closed terminal —
+    it resumes via human-update, not here."""
+    status = task["status"]
+    if status == "blocked_on_human":
+        raise TaskforgeError(
+            "task is blocked_on_human, not a closed terminal — resume it "
+            "with human-update, which captures the human's answer")
+    if status not in CLOSED:
+        raise TaskforgeError(
+            f"task is {status!r}, not a closed terminal (done/cancelled); "
+            "there is nothing to reopen")
+    record(task, "reopened", actor, reason=reason)
+    task["status"] = "new"
+    refresh_status(task)
+    store.save(task)
+    refresh_dependents(task["id"])
+    return task

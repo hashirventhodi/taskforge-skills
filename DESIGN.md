@@ -132,6 +132,7 @@ budget ID                                  ◆ retry budget + next_review_versio
 validate RESULT --actor A [--task ID]     ◆ two-phase: check without writing
 apply ID RESULT --actor A                  validate, then apply atomically
 human-update ID --note N [RESULT] / cancel ID --reason R
+reopen ID --reason R                       ◆ restore a closed terminal (§10)
 config                                     ◆ print effective configuration
 record-review-prompt ID --version N FILE   ◆ store reviewer prompt for audit
 audit-review ID                            ◆ verify recorded prompts (§6)
@@ -416,3 +417,35 @@ engine, capability matrix (actor `add-task` → `taskforge`), and the three
 single-responsibility workflow skills are unchanged. Overturned from the
 initial design: "add-task is a separate skill" — separateness bought
 nothing once the entry point had to exist anyway.
+
+### v0.2 — reopen: closed terminals become reversible
+
+**`done` and `cancelled` gained a `reopen` path; `blocked_on_human` did
+not.** The original model had three terminal statuses and no way back from
+any closed one — a wrongly-cancelled or to-be-extended task was a dead end,
+which contradicts the durability premise (work is supposed to survive). The
+fix is unusually small because the architecture already carried it: reopen
+touches **no** artifacts. Supersession only sets flags, history is
+append-only, and there are no scratch lifecycle fields to clear (the close
+reason lives in an immutable event) — so reopen is a status transition plus
+a recorded event, and routing is **derived** by `refresh_status` from the
+task's existing artifacts, not assigned. This is the derived-readiness
+design paying off: the engine doesn't decide where a reopened task goes; its
+artifacts do.
+
+Two decisions worth recording:
+
+* **`blocked_on_human` is excluded.** It is a *park* awaiting a human answer,
+  not a closed terminal; it already had the right resurrection path
+  (`human-update`, which captures that answer). Folding it into reopen would
+  bypass the answer capture. `CLOSED = {done, cancelled}` (which release
+  blockers) turned out to be exactly the reopenable set — the distinction the
+  code already drew for a different reason.
+* **Reopening re-blocks still-active dependents, for free.** `blocked_by`
+  edges persist through a close and readiness derives blocker-openness live,
+  so a reopened blocker flips its still-active waiters back to `waiting` with
+  no bespoke logic — the same `refresh_dependents` pass that wakes them on
+  close (renamed from `wake_blocked_by`, now symmetric: `unblocked` on close,
+  `reblocked` on reopen). Terminal dependents are untouched (terminal wins in
+  readiness) — a finished task does not un-finish because an upstream task
+  reopened.

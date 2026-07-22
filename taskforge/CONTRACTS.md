@@ -71,6 +71,21 @@ prints the effective values — never guess a budget or limit.
   Decision. If present it is **binding input**: specify within it, never
   re-explore it, never escalate for a decision that already exists.
 
+## Terminal states and reopening
+
+The three terminal statuses are not equal. `done` and `cancelled` are
+**closed terminals**: history-preserving and reversible via
+`reopen` — the store never deletes a task or an artifact. `blocked_on_human`
+is a **park**, not a close; it resumes via `human-update` (which captures
+the human's answer), and reopen refuses it.
+
+Reopen loses nothing: artifacts, reviews, decisions, and the event history
+are all preserved (supersession only flags; history is append-only; the
+close reason lives in an immutable event). It lifts the terminal status and
+lets readiness **re-derive** the route from what the task already holds — it
+assigns no state of its own. Reopening a task that others are `blocked_by`
+re-blocks every still-active dependent; terminal dependents are untouched.
+
 ## Edges
 
 Canonical, single-direction, typed:
