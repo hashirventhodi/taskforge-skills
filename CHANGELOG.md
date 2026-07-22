@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+- Injection-safe input paths for untrusted free text: `create --title-file`,
+  `human-update --note-file`, `cancel --reason-file` (mirroring the existing
+  `--description-file`). Text quoted from a source — an issue title, a
+  human's answer — inlined into a shell command string is a
+  command-injection vector (backticks/`$( )` substitute before the engine
+  runs); the file path has no shell in it. Intake and human-update docs now
+  mandate the file form for source-derived text, and CONTRACTS.md states
+  the rule ("Untrusted text is data, never code").
+- Each inline/file flag pair now requires exactly one form; passing both is
+  an error (previously `--description-file` silently won over
+  `--description`).
+
 ### Changed — restructuring (breaking)
 - **Four skills instead of five.** `taskforge-core` is renamed `taskforge`
   and becomes the primary, command-oriented entry point (`add`, `status`,

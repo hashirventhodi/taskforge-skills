@@ -30,13 +30,17 @@ invent content.
 
 ## 3. Create
 
+Title and description are source-derived text — **always pass both by file**
+(CONTRACTS.md → "Untrusted text is data"). Write the files with your editor
+tool, never via `echo`/heredoc interpolation:
+
 ```bash
-python3 $SCRIPT create --title "..." --description-file /tmp/desc.txt \
+python3 $SCRIPT create --title-file /tmp/title.txt \
+  --description-file /tmp/desc.txt \
   --source-type github --source-ref "https://github.com/org/repo/issues/42"
 ```
 
-Use `--description-file` for anything beyond one line. Batch = one create
-per item; collect ids from output.
+Batch = one create per item; collect ids from output.
 
 ## 4. Stated relationships only
 

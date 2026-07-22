@@ -42,7 +42,7 @@ the next skill; it never runs it.
 | `why <id>` | explain routing / stuckness | `readiness TASK-x` + `blocked-by TASK-x`; see below |
 | `budget <id>` | review-retry budget | `python3 $SCRIPT budget TASK-x` |
 | `unblock <id>` | human answered | see Human unblocking |
-| `cancel <id>` | close without doing | `python3 $SCRIPT cancel TASK-x --reason "…"`, then sync per `references/sync.md` |
+| `cancel <id>` | close without doing | `python3 $SCRIPT cancel TASK-x --reason "…"` (`--reason-file` when quoting the user), then sync per `references/sync.md` |
 | `sync <id>` | tracker sync-back | `references/sync.md` |
 | `doctor` | store integrity | see Maintenance |
 | `audit <id>` | reviewer isolation | `python3 $SCRIPT audit-review TASK-x` |
@@ -58,7 +58,9 @@ an answer.
 When the user answers a `blocked_on_human` task or amends a parked one:
 
 ```bash
-python3 $SCRIPT human-update TASK-x --note "their answer, verbatim gist" [result.json]
+# The note quotes the human — write it to a file with your editor tool and
+# pass the path (CONTRACTS.md → "Untrusted text is data"):
+python3 $SCRIPT human-update TASK-x --note-file /tmp/note.txt [result.json]
 ```
 
 Attach a result.json only if the answer translates into artifacts (e.g. the

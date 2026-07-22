@@ -32,12 +32,35 @@ def fail(msg):
     sys.exit(1)
 
 
+def text_arg(inline, file_path, flag, strip_newline=True):
+    """Resolve a free-text argument that may arrive inline or by file.
+
+    The --<flag>-file form exists as the injection-safe path: text quoted
+    from an untrusted source (an issue title, a human's answer) inlined into
+    a shell command string is a command-injection vector — backticks/$()
+    substitute before this program ever runs. A file is written without a
+    shell in the path. Exactly one form is required; both is an error so
+    ambiguity is loud. Single-line fields strip one trailing newline
+    (editor-written files end with one); the description stays verbatim.
+    """
+    if inline is not None and file_path is not None:
+        raise TaskforgeError(
+            f"pass --{flag} or --{flag}-file, not both")
+    if file_path is not None:
+        text = Path(file_path).read_text(encoding="utf-8")
+        return text.rstrip("\n") if strip_newline else text
+    if inline is not None:
+        return inline
+    raise TaskforgeError(f"requires --{flag} or --{flag}-file")
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="tasks.py")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create")
-    c.add_argument("--title", required=True)
+    c.add_argument("--title")
+    c.add_argument("--title-file")
     c.add_argument("--description")
     c.add_argument("--description-file")
     c.add_argument("--source-type", default="manual",
@@ -66,11 +89,13 @@ def build_parser():
     h = sub.add_parser("human-update")
     h.add_argument("id")
     h.add_argument("result_json", nargs="?")
-    h.add_argument("--note", required=True)
+    h.add_argument("--note")
+    h.add_argument("--note-file")
 
     x = sub.add_parser("cancel")
     x.add_argument("id")
-    x.add_argument("--reason", required=True)
+    x.add_argument("--reason")
+    x.add_argument("--reason-file")
 
     r = sub.add_parser("record-review-prompt")
     r.add_argument("id")
@@ -95,16 +120,12 @@ def run_command(args):
     from engine.validation import validate_result
 
     if args.cmd == "create":
-        if args.description_file:
-            desc = Path(args.description_file).read_text(encoding="utf-8")
-        elif args.description:
-            desc = args.description
-        else:
-            raise TaskforgeError(
-                "create requires --description or --description-file")
+        title = text_arg(args.title, args.title_file, "title")
+        desc = text_arg(args.description, args.description_file,
+                        "description", strip_newline=False)
         with store.store_lock():
             store.ensure_config_file()
-            t = new_task(args.title, desc, args.source_type, args.source_ref)
+            t = new_task(title, desc, args.source_type, args.source_ref)
             record(t, "created", "taskforge",
                    detail={"source": args.source_type,
                            "reference": args.source_ref})
@@ -154,11 +175,12 @@ def run_command(args):
             out(apply_mod.apply_result(t, result, actor=args.actor))
 
     elif args.cmd == "human-update":
+        note = text_arg(args.note, args.note_file, "note")
         with store.store_lock():
             t = store.load(args.id)
             if t["status"] == "blocked_on_human":
                 t["status"] = "new"
-            record(t, "human_updated", "human", reason=args.note)
+            record(t, "human_updated", "human", reason=note)
             if args.result_json:
                 result = json.loads(
                     Path(args.result_json).read_text(encoding="utf-8"))
@@ -169,10 +191,11 @@ def run_command(args):
                 out(summary(t))
 
     elif args.cmd == "cancel":
+        reason = text_arg(args.reason, args.reason_file, "reason")
         with store.store_lock():
             t = store.load(args.id)
             t["status"] = "cancelled"
-            record(t, "cancelled", "human", reason=args.reason)
+            record(t, "cancelled", "human", reason=reason)
             store.save(t)
             apply_mod.wake_blocked_by(t["id"])
         out(summary(t))

