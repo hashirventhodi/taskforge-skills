@@ -1,5 +1,13 @@
 # taskforge-skills — Engineering Handoff
 
+> **Historical (point-in-time, v0.1 → v0.2).** This is the engineering
+> handoff written during initial development, kept as history. It is **not**
+> maintained and may not reflect the current design — the authoritative,
+> current references are [`DESIGN.md`](../../DESIGN.md),
+> [`taskforge/CONTRACTS.md`](../../taskforge/CONTRACTS.md),
+> [`docs/PUBLIC_API.md`](../PUBLIC_API.md), and
+> [`CHANGELOG.md`](../../CHANGELOG.md).
+
 **To:** the next owner (a fresh Claude Code session or human engineer)
 **Scope:** everything needed to continue this project without access to prior discussions.
 **Package:** `taskforge-skills/` (this document lives at its root). Companion validation repo: `demo-wordstats/`.

@@ -1,6 +1,8 @@
-# M3 walkthrough: the framework against a real task
+# Walkthrough: the framework against a real task
 
-A record of the first end-to-end validation on a real codebase (`wordstats`,
+A worked example of the full workflow on a real codebase — intake → refine →
+run → review → done. Originally the "M3" milestone validation record
+(`wordstats`,
 a small stdlib CLI with a unittest suite), exercising the workflow exactly
 as the skills instruct — readiness guards, templates, validate-then-apply,
 recorded reviewer prompts, reports. Ids and outputs below are from the

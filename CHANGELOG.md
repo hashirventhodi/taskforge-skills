@@ -27,6 +27,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The diagnostic detail (`reason`/`blocking_ids`/`cycle`) remains available
   from the dedicated `readiness <id>` command.
 
+### Migration (from 0.2.0)
+- **Re-install** so the engine and all four skills move together:
+  `npx skills add hashirventhodi/taskforge-skills`. The output changes above
+  are safe because skills and engine install as a set — no partial upgrade.
+- **Existing `.tasks/` stores are untouched.** These are *output-shape*
+  changes, not storage changes; a store written by 0.2.0 is schema-1 and is
+  read, routed, and continued by the new engine with no migration step
+  (verified). `tasks.py migrate` remains a no-op at this schema version.
+
 ### Fixed
 - **Directional schema compatibility** (review finding T2-4,
   [#4](https://github.com/hashirventhodi/taskforge-skills/issues/4)). The

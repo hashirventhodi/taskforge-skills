@@ -17,8 +17,8 @@ self-review.
 
 ```
 taskforge/             the primary entry point + shared SDK
-  SKILL.md             command-oriented: add · status · backlog · next · show ·
-                       why · unblock · cancel · sync · doctor · audit · config
+  SKILL.md             command-oriented: intake · backlog queries · routing ·
+                       lifecycle · maintenance (full command table in the file)
   CONTRACTS.md         the architecture (single source, read once per session)
   capabilities.json    actor → allowed artifacts/relations/signals (deny-by-default)
   scripts/tasks.py     engine entry point + stable API facade (stdlib-only)
@@ -51,6 +51,26 @@ your agent's skills directory by hand — `.claude/skills/` (project),
 the engine through it, as a sibling directory (resolution order in
 `taskforge/CONTRACTS.md`; `TASKFORGE_SCRIPT` overrides). Requires
 Python 3.8+; no dependencies, tests included.
+
+## Your first task
+
+The skills are the interface — you drive the workflow in natural language and
+the agent invokes them. In an agent session in your repo:
+
+- **Add work:** *"add a task: make the export button also support CSV"* →
+  `taskforge` captures it (readiness `refine`).
+- **Refine it:** *"what's next for that task?"* → `taskforge-refine` turns it
+  into a specification (or asks a blocking question, or escalates a genuine
+  architectural fork to `taskforge-explore`).
+- **Run it:** *"run it"* → `taskforge-run` implements against the spec and
+  submits the diff to an independent, recorded review before it can reach
+  `done`.
+- **Check in:** *"what's the backlog?" / "why is TASK-x stuck?"* → the
+  `taskforge` hub answers from derived state.
+
+[`examples/walkthrough.md`](examples/walkthrough.md) is a full worked run on
+a real codebase — intake → refine → run → review → done — if you want to see
+every step and command first.
 
 Task state lives in `.tasks/` (one JSON per task). The store is
 **self-ignoring by default** (the engine writes `.tasks/.gitignore` on first

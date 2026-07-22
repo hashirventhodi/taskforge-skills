@@ -32,9 +32,6 @@ CLI = HUB / "scripts" / "engine" / "cli.py"
 
 SKILL_FILES = sorted(ROOT.glob("*/SKILL.md"))
 REFERENCE_FILES = sorted((HUB / "references").glob("*.md"))
-# Docs that are point-in-time records: they legitimately name old versions,
-# renamed skills, and per-release counts. Excluded from "current-state" guards.
-HISTORY_DOCS = {"CHANGELOG.md", "DESIGN.md", "HANDOFF.md"}
 
 
 def read(path):
