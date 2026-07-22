@@ -51,11 +51,14 @@ Decisions:
   presence makes the SDK visible to the same install/discovery mechanism as
   the skills that depend on it. A shared folder without a SKILL.md is
   invisible infrastructure that partial installs silently drop.
-* ◆ **Script resolution order**, stated identically in every SKILL.md:
-  `$TASKFORGE_SCRIPT` env var → `.claude/skills/taskforge-core/scripts/tasks.py`
-  (project) → `~/.claude/skills/taskforge-core/scripts/tasks.py` (user) →
-  sibling path relative to the running skill. If none resolves, the skill
-  stops and reports the missing dependency — it never improvises task state.
+* ◆ **Script resolution order**, defined once in CONTRACTS.md: the
+  `$TASKFORGE_SCRIPT` env var → the sibling path relative to the running
+  skill → the canonical `.agents/skills/` install (project, then user) →
+  agent-specific directories such as `.claude/skills/`. The sibling path is
+  deliberately second: skills are always installed as siblings, so one rule
+  covers every agent the `skills` CLI targets rather than enumerating
+  per-agent directories forever. If none resolves, the skill stops and
+  reports the missing dependency — it never improvises task state.
 * **Task store**: `.tasks/` at repo root (override `TASKFORGE_DIR`). One JSON
   file per task; `audit/` subfolder for recorded reviewer prompts; `config.json`
   for settings.

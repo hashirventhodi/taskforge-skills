@@ -16,15 +16,30 @@ all of that for every future skill run.
 
 ## Locating the engine
 
-Resolution order — take the first that exists, set it as `$SCRIPT`:
+Resolution order — take the first that exists, set it as `$SCRIPT`. Every
+candidate ends in `taskforge-core/scripts/tasks.py`; only the prefix varies:
 
-1. `$TASKFORGE_SCRIPT` (explicit override)
-2. `.claude/skills/taskforge-core/scripts/tasks.py` (project install)
-3. `~/.claude/skills/taskforge-core/scripts/tasks.py` (user install)
-4. `<this-skill's-parent-dir>/taskforge-core/scripts/tasks.py`
+1. `$TASKFORGE_SCRIPT` (explicit override — always wins)
+2. `<this-skill's-parent-dir>/` — the sibling install. taskforge skills are
+   always installed as siblings, so this is correct for **any** agent and
+   should resolve first in practice.
+3. `.agents/skills/` — canonical project install (the `skills` CLI installs
+   here and symlinks agent dirs to it)
+4. `.claude/skills/` — project install, agent-specific
+5. `~/.agents/skills/` — canonical global install
+6. `~/.claude/skills/` — global install, agent-specific
 
-If none resolves: **stop** and tell the user taskforge-core is not installed.
-Never improvise task state without the engine.
+Other agents (Cursor, Codex, opencode, Windsurf, …) are covered by rules 2–3
+and 5: the `skills` CLI keeps one canonical copy under `.agents/skills` and
+points `.<agent>/skills/` at it. If an agent installs only into its own
+directory, substitute that directory for `.claude` in rules 4 and 6.
+
+The engine tolerates being reached through a symlink — `tasks.py` resolves
+its own real path before importing `engine/`.
+
+If none resolves: **stop** and tell the user taskforge-core is not installed
+(`npx skills add hashirventhodi/taskforge-skills`). Never improvise task
+state without the engine.
 
 Task store: `.tasks/` at the repo root (override `TASKFORGE_DIR`).
 Settings: `.tasks/config.json`, environment wins; `python3 $SCRIPT config`

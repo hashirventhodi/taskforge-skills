@@ -24,11 +24,22 @@ DESIGN.md              the design document, incl. critical review (§10)
 
 ## Install
 
-Copy all five skill directories into `.claude/skills/` (project) or
-`~/.claude/skills/` (user). **taskforge-core must travel with the others** —
-every skill resolves the engine through it (resolution order in
-CONTRACTS.md; `TASKFORGE_SCRIPT` overrides). Requires Python 3.8+; no
-dependencies, tests included.
+Via [skills.sh](https://skills.sh) — works with Claude Code, Cursor, Codex,
+opencode, Windsurf, Cline and any other agent the `skills` CLI supports:
+
+```bash
+npx skills add hashirventhodi/taskforge-skills          # this project
+npx skills add hashirventhodi/taskforge-skills --global # all projects
+```
+
+Install **all five** skills (the default). Or copy the five directories into
+your agent's skills directory by hand — `.claude/skills/` (project),
+`~/.claude/skills/` (user), or the CLI's canonical `.agents/skills/`.
+
+**taskforge-core must travel with the others** — every skill resolves the
+engine through it, as a sibling directory (resolution order in
+`taskforge-core/CONTRACTS.md`; `TASKFORGE_SCRIPT` overrides). Requires
+Python 3.8+; no dependencies, tests included.
 
 Task state lives in `.tasks/` (one JSON per task). The store is
 **self-ignoring by default** (the engine writes `.tasks/.gitignore` on first
