@@ -1,5 +1,10 @@
 # taskforge-skills
 
+[![CI](https://github.com/hashirventhodi/taskforge-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/hashirventhodi/taskforge-skills/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![Agent Skills](https://img.shields.io/badge/agent-skills-black.svg)](https://skills.sh)
+
 A production-quality Agent Skills framework implementing the durable-Task
 AI engineering workflow. Drop it into any repository: skills perform
 reasoning; a shared deterministic engine is the only writer of task state.
@@ -69,6 +74,7 @@ but is never its enforcement.
 
 ```bash
 python3 -m unittest discover taskforge-core/tests    # engine correctness
+python3 scripts/validate_skills.py                   # SKILL.md frontmatter
 python3 taskforge-core/scripts/tasks.py doctor       # store integrity
 python3 taskforge-core/scripts/tasks.py audit-review TASK-x   # reviewer isolation
 ```
@@ -101,3 +107,19 @@ survive evolution.
 Non-goals, permanently: no daemon, no orchestrator, no GitHub/Jira
 integration code (intake and sync-back are instructions over whatever
 MCP/CLI the session has), no auto-execution of generated tasks.
+
+## Contributing
+
+Contributions are welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md),
+which documents the architectural invariants a PR has to respect (the engine
+is the only writer of task state; deterministic rules never live in prompts;
+the engine stays stdlib-only). See also
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and, for vulnerabilities,
+[SECURITY.md](SECURITY.md).
+
+Note that skills execute with your agent's full permissions — read them
+before installing, here as anywhere else in the ecosystem.
+
+## License
+
+[MIT](LICENSE) © Hashir Venthodi

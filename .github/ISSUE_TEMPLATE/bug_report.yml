@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in the skills or the engine behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything involving task state, please include `tasks.py doctor`
+        output below — it is built to make store corruption legible.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. npx skills add hashirventhodi/taskforge-skills
+        2. Ask the agent to ...
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Engine (tasks.py / task state)
+        - Skill behaviour (refine / explore / run / add-task / core)
+        - Installation or path resolution
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and version
+      placeholder: "Claude Code 2.x / Cursor / Codex / ..."
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "python3 --version"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: doctor output
+      description: "`python3 <path>/taskforge-core/scripts/tasks.py doctor`"
+      render: json
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I ran the test suite (`python3 -m unittest discover taskforge-core/tests`)
+        - label: I confirmed all five skills are installed as siblings

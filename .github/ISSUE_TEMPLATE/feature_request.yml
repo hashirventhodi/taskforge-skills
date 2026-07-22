@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose a change to the workflow, engine or skills
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check `DESIGN.md` §10 first — it records decisions that were
+        already argued and, in some cases, overturned. Note the permanent
+        non-goals in `CONTRIBUTING.md`: no daemon, no orchestrator, no
+        vendored issue-tracker integration.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What breaks or is painful today? Concrete situations, not solutions.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer would change
+      description: Reasoning belongs in skills; anything enforceable belongs in the engine.
+      options:
+        - Skill prompt (judgment)
+        - Engine (deterministic rule)
+        - Both
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Invariants
+      options:
+        - label: This keeps the engine the only writer of task state
+        - label: This adds no runtime dependency to the engine
