@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -20,6 +21,12 @@ _SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "tasks.py"
 _spec = importlib.util.spec_from_file_location("tasks", _SCRIPT)
 tasks = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(tasks)
+
+# The engine's storage module (loaded when tasks.py imported it) — for the
+# lock constants/helpers, which the stable facade intentionally does not
+# re-export.
+import sys  # noqa: E402
+store = sys.modules["engine.store"]
 
 
 def spec_payload(scope="do it", criteria=None, adopted=False):
@@ -570,6 +577,76 @@ class TestRetryAfterTerminal(Base):
         r2 = self.apply(self.reload(t), result, "run")   # retry-after-timeout
         self.assertFalse(r2["applied"])
         self.assertEqual(r2["duplicate_of"], "d1")
+
+
+class TestStoreLock(Base):
+    """The lock's stale-break is mutually exclusive and self-verifying: a
+    lock is removed only while a session holds exclusive break-rights AND
+    re-confirms staleness — so a fresh lock is never destroyed. These target
+    the invariants directly (via the decomposed helpers), not thread timing."""
+
+    def lock_path(self):
+        return Path(self.dir) / ".lock"
+
+    def gate_path(self):
+        return Path(self.dir) / ".lock.break"
+
+    def write_lock(self, age_seconds):
+        self.lock_path().write_text(f"999999 {time.time() - age_seconds}")
+
+    def test_normal_acquire_release_reacquire(self):
+        # The happy path is unchanged: acquire, release, acquire again.
+        with store.store_lock():
+            self.assertTrue(self.lock_path().exists())
+        self.assertFalse(self.lock_path().exists())
+        with store.store_lock():  # re-acquire after release
+            pass
+
+    def test_stale_lock_is_broken_and_acquired(self):
+        self.write_lock(store.LOCK_STALE_SECONDS + 5)
+        with store.store_lock():
+            self.assertTrue(self.lock_path().exists())  # ours now
+        # The break gate is transient — cleaned up, never left behind.
+        self.assertFalse(self.gate_path().exists())
+
+    def test_fresh_lock_is_never_broken(self):
+        self.write_lock(1)  # 1s old — not stale
+        lock = store.store_lock()
+        lock._break_if_stale()
+        self.assertTrue(self.lock_path().exists())  # untouched
+
+    def test_break_requires_the_gate(self):
+        # Gate already held (a concurrent breaker) => even a stale lock is
+        # NOT removed: only one session may attempt recovery at a time.
+        self.write_lock(store.LOCK_STALE_SECONDS + 5)
+        self.gate_path().write_text("held by another breaker")
+        try:
+            store.store_lock()._break_if_stale()
+            self.assertTrue(self.lock_path().exists())  # not broken
+            self.assertTrue(self.gate_path().exists())  # someone else's gate
+        finally:
+            self.gate_path().unlink()
+
+    def test_stale_break_is_idempotent(self):
+        self.write_lock(store.LOCK_STALE_SECONDS + 5)
+        lock = store.store_lock()
+        lock._break_if_stale()                       # first: recovers
+        self.assertFalse(self.lock_path().exists())
+        lock._break_if_stale()                       # second: clean no-op
+        self.assertFalse(self.lock_path().exists())
+        self.assertFalse(self.gate_path().exists())  # gate released both times
+
+    def test_fresh_lock_acquire_times_out(self):
+        self.write_lock(1)  # fresh — cannot be broken
+        original = store.LOCK_ACQUIRE_TIMEOUT
+        store.LOCK_ACQUIRE_TIMEOUT = 0.3  # keep the test fast
+        try:
+            with self.assertRaises(tasks.TaskforgeError) as ctx:
+                with store.store_lock():
+                    pass
+            self.assertIn("locked", str(ctx.exception))
+        finally:
+            store.LOCK_ACQUIRE_TIMEOUT = original
 
 
 class TestCircuitBreakerAuthority(Base):

@@ -175,7 +175,10 @@ instructions that are actually deterministic. Moved into the script:
    this mechanism exists for.
 5. **Concurrency lock.** `.tasks/.lock` (O_EXCL, pid+timestamp, stale after
    60s) around every mutating command. Two Claude sessions in one repo can't
-   interleave a cascade.
+   interleave a cascade. Breaking a *stale* lock (crash recovery) is
+   serialized through a second O_EXCL gate so only one session may attempt
+   recovery and it re-verifies staleness before removing anything — see
+   §10.11.
 6. Everything the prototype already enforced: canonical edges (inverse names
    rejected with a pointer to the canonical form), payload validation,
    version circuit breaker (kind reaching v4 → blocked_on_human), self-edge
@@ -489,3 +492,46 @@ idempotency, so re-applying the same result would add a *duplicate* artifact
 version, re-trip the breaker, and loop — and it would introduce
 partial-application state the engine has deliberately avoided. Option A
 (above) keeps every apply atomic, durable, and idempotent.
+
+### v0.2.x — §10.11 stale-lock recovery is serialized, not racy (T1-2)
+
+**Fixes the TOCTOU race found in the v0.2.0 architecture review.** The store
+lock's happy path (a single `O_EXCL` create) was always correct; the defect
+was in *breaking a stale lock* left by a crashed session. The old code read
+the timestamp, judged it stale, and `unlink`-ed the path unconditionally —
+a read-decide-remove gap in which a second session could break the same
+stale lock and acquire a fresh one, only to have the first session's late
+`unlink` delete that fresh lock. Both would then believe they held it,
+defeating the mutual-exclusion guarantee the lock exists to provide (§3.2.5).
+
+The fix composes the primitive we already trust rather than adding a new one:
+a stale break must first acquire a second `O_EXCL` gate (`.lock.break`), so
+only one session may attempt recovery at a time, and under that gate it
+**re-verifies staleness** before removing anything. Correctness rests on one
+invariant — *while a stale `.lock` exists, `O_EXCL` blocks any fresh holder*
+— so a lock still stale when the sole breaker re-checks it has nothing live
+beneath it, and a fresh lock reads non-stale and is left untouched. The model
+moved from "anyone may decide to break" to "only one session may even attempt
+to break, and only after re-confirming."
+
+**Design rule (binding):** the break gate is *not* a second lock. It exists
+solely to serialize stale-lock recovery and never participates in normal
+acquisition — visible in the code as the private `_break_if_stale` helper,
+separate from `__enter__`'s acquire path.
+
+**Rejected alternatives**, each against TaskForge's portability + shared-store
+model: `os.rename` steal (rename-replace is last-writer-wins — no mutual
+exclusion — and a path-based move has the same TOCTOU as unlink); PID-liveness
+via `os.kill(pid, 0)` (POSIX-only, and meaningless for the git-tracked
+cross-machine store of §10.10); `fcntl`/`flock` (POSIX-only, broken on NFS);
+hardlink arbiters (new filesystem dependency + hairy restore races). The
+chosen design keeps the exact portability envelope of the original — only
+`O_EXCL` + `unlink`, no new filesystem assumption.
+
+**Accepted tradeoff:** the gate is deliberately *not* itself stale-broken —
+recursively stale-breaking the stale-breaker would reintroduce the race. If a
+session crashes in the microsecond it holds the gate (far rarer than crashing
+mid-cascade with the main lock), auto-recovery stops and acquisition raises
+the "delete the lock if stale" error naming both files. Safety (mutual
+exclusion) is never sacrificed; only liveness degrades to manual recovery in
+that near-impossible case — the right trade for a durability-first engine.

@@ -13,6 +13,7 @@ from pathlib import Path
 from engine.model import SCHEMA_VERSION, TaskforgeError
 
 LOCK_STALE_SECONDS = 60
+LOCK_ACQUIRE_TIMEOUT = 10
 
 
 def store_dir() -> Path:
@@ -119,11 +120,36 @@ def all_tasks():
 
 
 class store_lock:
-    """O_EXCL lock file; portable, stale-broken after LOCK_STALE_SECONDS."""
+    """Portable single-writer lock over the task store.
+
+    Normal acquisition is a single ``O_EXCL`` create — unchanged and fast.
+    The one operation that was previously non-atomic — breaking a *stale*
+    lock left by a crashed session — is serialized through a second
+    ``O_EXCL`` gate (``.lock.break``), so only one session may attempt
+    recovery at a time; the breaker re-verifies staleness *under* that gate
+    before removing anything, so a fresh lock is never destroyed.
+
+    Design rule — **the break gate is not a second lock.** It exists solely
+    to serialize stale-lock recovery and never participates in normal
+    acquisition. It is deliberately *not* itself stale-broken: recursively
+    stale-breaking the stale-breaker would reintroduce the very race this
+    removes. If a session crashes in the microsecond it holds the gate (far
+    rarer than crashing while holding the main lock through a whole cascade),
+    auto-recovery stops and acquisition raises the "delete the lock if stale"
+    error — manual recovery, never a silent loss of mutual exclusion.
+
+    Correctness rests on one invariant: while a stale ``.lock`` exists,
+    ``O_EXCL`` blocks any fresh holder from being created — so a lock still
+    stale when the sole breaker re-checks it has nothing live beneath it.
+    """
+
+    def __init__(self):
+        d = store_dir()
+        self.path = d / ".lock"
+        self.gate = d / ".lock.break"
 
     def __enter__(self):
-        self.path = store_dir() / ".lock"
-        deadline = time.time() + 10
+        deadline = time.time() + LOCK_ACQUIRE_TIMEOUT
         while True:
             try:
                 fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -131,18 +157,40 @@ class store_lock:
                 os.close(fd)
                 return self
             except FileExistsError:
-                try:
-                    stamp = float(self.path.read_text().split()[1])
-                    if time.time() - stamp > LOCK_STALE_SECONDS:
-                        self.path.unlink(missing_ok=True)
-                        continue
-                except (OSError, IndexError, ValueError):
-                    pass
+                if self._is_stale():
+                    self._break_if_stale()
                 if time.time() > deadline:
                     raise TaskforgeError(
                         "task store is locked by another session "
-                        f"({self.path}); retry, or delete the lock if stale")
+                        f"({self.path}); retry, or if a crash left it stale "
+                        f"delete {self.path} (and {self.gate} if present)")
                 time.sleep(0.2)
 
     def __exit__(self, *exc):
         self.path.unlink(missing_ok=True)
+
+    def _is_stale(self):
+        """True iff the current lock's timestamp is older than the stale
+        threshold. A missing or malformed lock is treated as NOT stale — do
+        not break what cannot be confirmed dead."""
+        try:
+            stamp = float(self.path.read_text().split()[1])
+        except (OSError, IndexError, ValueError):
+            return False
+        return time.time() - stamp > LOCK_STALE_SECONDS
+
+    def _break_if_stale(self):
+        """Remove the lock ONLY while holding exclusive break rights AND with
+        staleness re-confirmed under that exclusion — serialization plus
+        re-verify is what makes removal safe. Idempotent: a second breaker
+        acquires the gate, re-reads, finds nothing stale, and does nothing."""
+        try:
+            gfd = os.open(self.gate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            return  # another session is already recovering; leave it to them
+        try:
+            if self._is_stale():
+                self.path.unlink(missing_ok=True)
+        finally:
+            os.close(gfd)
+            self.gate.unlink(missing_ok=True)

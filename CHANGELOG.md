@@ -7,6 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **Stale-lock recovery is race-free** (review finding T1-2,
+  [#2](https://github.com/hashirventhodi/taskforge-skills/issues/2)). Breaking
+  a stale store lock left by a crashed session read the timestamp then
+  `unlink`-ed the path unconditionally — a TOCTOU gap in which two sessions
+  could both break the same stale lock and end up both holding a fresh one,
+  defeating mutual exclusion. Stale-breaking is now serialized through a
+  second `O_EXCL` gate (`.lock.break`) and re-verifies staleness under it, so
+  a fresh lock is never removed. Same primitives as before (`O_EXCL` +
+  `unlink`) — no new portability assumption. The gate is serialization-only,
+  never a second lock, and deliberately not itself stale-broken; an
+  essentially-impossible crash while holding it degrades to the existing
+  "delete the lock if stale" manual path, never a silent double-hold.
 - **Circuit-breaker park no longer discards declared work** (review finding
   T1-1, [#1](https://github.com/hashirventhodi/taskforge-skills/issues/1)).
   When an artifact tripped the version breaker or review budget mid-apply, the
