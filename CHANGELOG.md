@@ -30,7 +30,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   budget).
 - CI on every push and pull request: the frontmatter validator, the engine
   suite across Python 3.8–3.13, and an end-to-end job that installs the
-  skills with the real `skills` CLI and asserts all five land.
+  skills with the real `skills` CLI and asserts every skill lands.
 
 ### Changed
 - Engine resolution now prefers the sibling path and knows the `skills`
