@@ -1,0 +1,15 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "artifacts": [{
+    "kind": "specification",
+    "payload": {
+      "scope": "",
+      "acceptance_criteria": ["each independently verifiable from spec+diff+tests"],
+      "constraints": [],
+      "assumptions": ["only safe ones; risky ones are CLARIFY prerequisites"],
+      "edge_cases": [],
+      "adopted_from_source": false
+    }
+  }],
+  "notes": "elaborated: <one line>"
+}

@@ -1,0 +1,16 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "artifacts": [{
+    "kind": "specification",
+    "payload": {
+      "scope": "STAY CLOSE TO THE ORIGINAL DESCRIPTION",
+      "acceptance_criteria": ["EXTRACTED, NOT INVENTED"],
+      "constraints": [],
+      "assumptions": [],
+      "edge_cases": [],
+      "adopted_from_source": true
+    },
+    "supersedes_reason": "only needed when replacing a previous spec"
+  }],
+  "notes": "adopted: description was execution-ready"
+}

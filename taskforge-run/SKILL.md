@@ -1,0 +1,89 @@
+---
+name: taskforge-run
+description: Implement a taskforge task against its active Specification and verify it with an independent fresh-context review subagent. Use when a task's readiness is "run", or when the user asks to run, implement, execute, build, or ship a taskforge task that has a specification. Covers the implement-review-retry loop, recorded-and-auditable reviewer isolation, root-cause escalation back to taskforge-refine or taskforge-explore, and scope discipline (out-of-scope discoveries become follow-up tasks). Tasks without an active specification route to taskforge-refine instead.
+---
+
+# taskforge-run
+
+Implement the active Specification, then submit the work to an independent
+reviewer in a fresh context. Run finishes a task or escalates it — it never
+quietly lowers the bar and never expands scope.
+
+**Prerequisites**: read `taskforge-core/CONTRACTS.md` this session; resolve
+`$SCRIPT`; guard on readiness (`run` required).
+
+## 1. The spec is the whole contract
+
+`python3 $SCRIPT show <id>`. The active specification — not the description,
+not your memory of the conversation — is what you implement and what the
+reviewer judges. Spec vs description conflict? The spec wins; note the
+conflict in your report. Record the spec's version; you cite it in
+artifacts. Check `python3 $SCRIPT budget <id>` if resuming a task with prior
+rejections.
+
+## 2. Implement
+
+Plan briefly; work on an isolated line (branch `taskforge/<task-id>` in a
+git repo); run the tests.
+
+**Scope discipline is binding.** Adjacent problems you notice — flaky tests,
+dead code, missing validation elsewhere — become `follow_up` entries in your
+result, described to stand alone. Never extra diff: the reviewer should see
+nothing the spec didn't ask for.
+
+**Upstream discoveries end the attempt immediately** — don't push through a
+broken contract:
+
+* spec ambiguous/contradictory/unimplementable → `signal: escalate_refine`,
+  the defect named precisely;
+* the approach itself cannot work → `signal: escalate_explore`;
+* blocked on something only a human can resolve → `signal: block_on_human`.
+
+Include artifacts already produced and all follow_ups in the escalation
+result — partial evidence is still evidence.
+
+## 3. Independent review — recorded, isolated, non-negotiable
+
+Follow `taskforge-core/references/reviewer-prompt.md` **exactly**: fill the
+three slots (spec verbatim, full diff, test results) and nothing else;
+`record-review-prompt` **before** spawning; fresh-context subagent (Task
+tool); one re-ask on malformed output, then `block_on_human` — never guess a
+verdict, never self-review. `audit-review` will later verify your recorded
+prompts deterministically; a review without a recorded prompt is flagged as
+an isolation failure. Record the verdict verbatim as the review artifact,
+including rejections you disagree with (disagree in the report, not the
+record).
+
+## 4. Route on the verdict
+
+* **approved** → template `run-approved.json`, `signal: done`.
+* **rejected / `implementation`** → fix and retry: feed back the reviewer's
+  `findings` list only; re-test; **new** fresh-context reviewer (new recorded
+  prompt, next version number). Budget: `max_review_retries` from
+  `$SCRIPT config` (default 2 retries, 3 attempts). All attempts'
+  implementation + review artifacts go in the final result, in order. The
+  engine enforces the budget — a rejection beyond it parks the task
+  automatically; your `signal: block_on_human` on exhaustion states the
+  unresolved findings.
+* **rejected / `specification`** → `signal: escalate_refine` (template
+  `run-rejected-escalate.json`), reason from findings.
+* **rejected / `architecture`** → `signal: escalate_explore`; the engine
+  also escalates the parent of a child task.
+
+## 5. Emit, apply, sync, report
+
+Fresh `result_id`; `validate` then `apply` with `--actor run`. Terminal +
+external source → sync per `taskforge-core/references/sync.md` (with its
+honesty rule). Report per `reporting.md`: attempts, verdicts, root causes,
+follow_ups, final readiness. No merging/deploying beyond the spec's own
+criteria; no starting generated tasks.
+
+## Quality bar
+
+* Recorded reviewer prompts pass `audit-review` (criteria present verbatim;
+  implementation summary absent).
+* Every acceptance criterion appears in `criteria_results` with explicit
+  pass/fail.
+* Retries change the code, not the reviewer's standards; never retry
+  `specification` or `architecture` rejections.
+* The diff contains nothing the spec didn't ask for.

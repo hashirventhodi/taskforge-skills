@@ -1,0 +1,10 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "artifacts": [
+    {"kind": "implementation", "payload": {"summary": "", "diff_ref": "", "test_results": {"passed": 0, "failed": 0, "summary": ""}}},
+    {"kind": "review", "payload": {"verdict": "rejected", "root_cause": "specification|architecture", "criteria_results": [], "findings": ["reviewer findings verbatim"]}}
+  ],
+  "signal": "escalate_refine",
+  "signal_reason": "reviewer root cause <cause>: <first finding>",
+  "notes": "attempts recorded; escalated on reviewer root cause"
+}

@@ -1,0 +1,18 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "artifacts": [
+    {"kind": "implementation", "payload": {
+      "summary": "what changed, one paragraph",
+      "diff_ref": "branch:taskforge/TASK-xxxx",
+      "test_results": {"passed": 0, "failed": 0, "summary": ""}}},
+    {"kind": "review", "payload": {
+      "verdict": "approved",
+      "criteria_results": [{"criterion": "", "passed": true, "note": ""}],
+      "findings": []}}
+  ],
+  "generated_tasks": [
+    {"title": "out-of-scope discovery (delete if none)", "description": "", "relation": "follow_up", "reason": "discovered out of scope during implementation"}
+  ],
+  "signal": "done",
+  "notes": "review approved against specification v<N>"
+}

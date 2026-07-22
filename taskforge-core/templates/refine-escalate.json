@@ -1,0 +1,6 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "signal": "escalate_explore",
+  "signal_reason": "one sentence naming the open approach-level decision",
+  "notes": "escalated: architectural decision required"
+}

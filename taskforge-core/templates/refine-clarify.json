@@ -1,0 +1,10 @@
+{
+  "result_id": "REPLACE-WITH-UUID",
+  "generated_tasks": [{
+    "title": "THE QUESTION AS A TITLE",
+    "description": "The question stated so a human can answer inside this task, with the options and their implications.",
+    "relation": "prerequisite",
+    "reason": "cannot specify TASK-<origin> without this answer"
+  }],
+  "notes": "blocked on external input: <one line>"
+}
