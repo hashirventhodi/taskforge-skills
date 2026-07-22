@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-22
+
+The **Human Console** release: TaskForge gains its second client. The
+engine's read API (`snapshot`) and a local web UI complete the symmetry the
+architecture had been converging on — commands are the write API, snapshot
+is the read API, the engine is the sole writer and sole source of derived
+state, and the AI (CLI + skills) and the human (Console) are peer clients
+over those contracts. No breaking changes; no new engine concepts — the one
+engine addition (`snapshot`) is a projection with a stated provenance rule,
+and everything else is client and method (DESIGN §10.15–§10.16).
+
 ### Added — the Human Console (`console/`)
 - **A local web UI as the human actor's native seat** — the CLI + skills are
   the AI's interface; the Console is the human's, a thin peer client of the
@@ -300,7 +311,8 @@ into a stable foundation. **Contains breaking changes — see Migration.**
 - Recorded, auditable reviewer isolation (`audit-review`).
 - 41-test engine suite.
 
-[Unreleased]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hashirventhodi/taskforge-skills/compare/v0.1.0...v0.2.0
