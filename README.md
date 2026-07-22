@@ -30,6 +30,7 @@ taskforge/             the primary entry point + shared SDK
 taskforge-refine/      universal entry: adopt | elaborate | clarify | escalate
 taskforge-explore/     Decisions; proposes decomposition + research disposition
 taskforge-run/         implement + recorded, auditable fresh-context review
+console/               the Human Console — local web UI for the human actor
 DESIGN.md              the design document, incl. critical review (§10)
 ```
 
@@ -82,6 +83,25 @@ use) because task state is workflow state, orthogonal to code branches — a
 Run branch must never sweep it into a feature commit. To track workflow
 history in git instead, delete `.tasks/.gitignore` and commit the store from
 the trunk line only. Settings in `.tasks/config.json`; env vars win.
+
+## The Human Console
+
+The Console is the *human actor's* native seat, as the CLI + skills are the
+AI's — two peer clients of the same engine:
+
+```bash
+python3 console/server.py            # http://127.0.0.1:7373 over ./.tasks
+python3 console/server.py --dir path/to/.tasks --port 7373
+```
+
+Home is the queue of everything that needs a human — approvals (explore's
+topology proposals and research dispositions), questions, and stalled work
+(budget/breaker/cycle parks) — plus a task workspace, a dependency graph, and
+a read-only board. Every button is an existing engine command; the server
+adds no behavior (no second writer, no re-derived state, loopback-only).
+Design records live in [`docs/console/`](docs/console/design-principles.md);
+fixture stores for every screen state come from
+`python3 scripts/make_fixtures.py <dir>`.
 
 ## Division of labor
 

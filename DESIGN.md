@@ -800,3 +800,36 @@ a concept. What it does add is *authority*: it is the canonical answer to
 once. Its shape is public API (frozen keys machine-checked against
 `docs/PUBLIC_API.md`), versioned by `snapshot_version` for directional
 evolution like the store schema.
+
+### v0.5.x — §10.16 the Human Console is a client, not a subsystem
+
+The Console (`console/`) is the human actor's native seat, as the CLI +
+skills are the AI's: two peer clients of one engine. Its architecture is a
+set of refusals, recorded here because each closes a specific failure mode:
+
+- **Every operation is a real engine CLI invocation** — the server calls
+  `tasks.main(argv)` in-process (same lock, same validation, same refusals),
+  so the engine stays the sole writer and sole deriver. There is no server-
+  side model, cache, or database; the "backend" is ~180 lines of stdlib
+  routing.
+- **Writes are whitelisted to the human's surface** (`human-update`,
+  `cancel`, `reopen`, `create`); skill commands (`apply`, `validate`) are
+  refused before the engine sees them — the Console must never become a way
+  to impersonate a skill actor.
+- **Browser text is untrusted** and reaches the engine only through the
+  file-input flags, the same rule CONTRACTS imposes on skills.
+- **The client interprets; it never decides.** Sectioning the parked queue,
+  grouping artifact history into attempt cycles, flagging repeated rejection
+  causes — presentation over verbatim facts. No auto-approve, no default
+  disposition, no urgency scoring, no draggable board (columns are derived;
+  statuses are earned).
+- **Loopback-bound, single-user** — accounts/remote/live-sync are deferred
+  until real usage demands them, then face §10.14 scrutiny.
+
+Screen designs (docs/console/) were produced against staged fixture stores
+(`scripts/make_fixtures.py`, one per park cause, self-verifying) — and the
+method caught two engine-adjacent defects before any UI existed: the park-
+attribution bug (human_blocked recorded the wrong actor) and, during live
+browser testing, a client bug (background refresh destroying in-progress
+composer input). Designing against states the engine actually produces is
+recorded here as the standing method for client work.

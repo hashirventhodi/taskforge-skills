@@ -6,6 +6,47 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — the Human Console (`console/`)
+- **A local web UI as the human actor's native seat** — the CLI + skills are
+  the AI's interface; the Console is the human's, a thin peer client of the
+  same engine (`python3 console/server.py`, loopback-only, stdlib-only, no
+  build step). Every operation is a real engine CLI invocation in-process
+  (same lock, same refusals — surfaced verbatim); writes are whitelisted to
+  the human surface (`human-update`, `cancel`, `reopen`, `create`); browser
+  text reaches the engine by file-input flags (DESIGN §10.16).
+- **Home** — the queue of everything needing a human, by the two-clause rule
+  (`blocked_on_human` OR readiness `human`), sectioned approve / answer /
+  redirect from engine-fact discriminators; cycle members merge into one
+  card; the empty queue is the success state. Composers: topology approval
+  (proposal pre-parsed into an editable result), research disposition
+  (close / spawn+close / continue), answers, redirects.
+- **Task Detail** — the workspace: the artifact chain rendered as attempt
+  cycles with repeated-rejection diagnosis, budget, the immutable
+  description always visible, actions derived from state, related tasks,
+  and the raw timeline (folded, never hidden).
+- **Graph** — blocking skeleton foregrounded, provenance toggleable,
+  `decision_ref` labeled with its pinned version; deterministic layout.
+  **Board** — read-only readiness projection; no dragging.
+- Console design records in `docs/console/` (home-screen, task-detail,
+  graph-view, board-view, design-principles); screen elements justified by
+  fixture states, not wireframes. Server contract enforced by
+  `tests/test_console.py` (real server, real store, whitelist, injection
+  safety, engine-refusal passthrough).
+
+### Added — park-cause fixture stores
+- `scripts/make_fixtures.py` stages seven self-verifying stores — one per
+  way the engine can need a human, plus `quiet` — through real engine
+  commands only; each asserts the state it claims, doubling as a living
+  spec and as Console test data.
+
+### Fixed — park attribution
+- A skill-requested `block_on_human` recorded the `human_blocked` event with
+  actor `tasks.py`, permanently misattributing who parked the task.
+  `apply_signal` now passes the requesting actor through; engine enforcement
+  parks (budget, breaker, cycle) remain `tasks.py` with
+  `enforced_by: "engine"`. Found by the fixture-first design method before
+  any UI existed.
+
 ### Added — the read model: `snapshot`
 - **`tasks.py snapshot`** — one atomic, deterministic projection of the whole
   store, for clients and tooling (the read API a web UI will build on; the
