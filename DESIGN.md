@@ -750,3 +750,53 @@ now means "a pending route to Explore, set by escalation *or* intake"; the
 name is narrower than the meaning, but a rename is a stored-field schema
 migration not worth its cost now — documented broader, revisited at a future
 schema revision.
+
+### v0.5.x — §10.15 the read model (`snapshot`) and its provenance rule
+
+**Preparing for a web UI as a peer client of the engine** (the human actor's
+native seat, as the CLI + skills are the AI's) surfaced the need for a read
+API: one call answering "what is the state of the world?" so no client
+composes it from N per-command calls — or, fatally, re-derives state.
+`snapshot` is that call: an atomic (taken under the existing store lock, so
+never torn mid-cascade), deterministic (sorted; same store → same bytes
+except `generated_at`) projection of the whole store.
+
+The design rule, stated so every future addition can be audited:
+
+> **Every snapshot field traces to exactly one of: stored state (task fields
+> and events, verbatim), derived state (existing engine logic only —
+> `evaluate()`, `active()`), or metadata about the snapshot itself. A
+> proposed field that cannot be traced to one of these is presentation
+> logic or a new engine concept, and belongs in a client.**
+
+Equivalently, the reviewer's question for any snapshot change: *"is this
+exposing an engine fact, or making a presentation decision?"* Three
+applications of the rule are worth recording:
+
+- **`decision_ref` is normalized into `edges[]`** (`type: "decision_ref"`).
+  It is stored as a field but *is* the fourth semantic edge — how a parent's
+  re-decision reaches a child's spec. Normalizing once, in the engine, means
+  no client needs the special knowledge that one edge is stored differently;
+  a graph client that missed it could not explain the store's most surprising
+  cross-task behavior. This is restatement of stored fact, not new semantics.
+- **Parked tasks carry their latest `human_blocked` event verbatim** — the
+  approval console's content — but deliberately *unclassified*: adding a
+  `kind: proposal|question` field would bake presentation categories into
+  the engine and hand it a taxonomy to maintain. Clients distinguish, exactly
+  as the hub prompt does.
+- **`skipped[]` surfaces what the engine cannot read** (future-schema per
+  §10.12, unreadable files): a snapshot must never claim to be the world
+  while silently missing part of it.
+
+`readiness` stays the bare routing string (the v0.3.0 rule); the diagnostic
+detail rides in a separate `readiness_detail` key — the same information the
+`readiness <id>` command already returns, computed by the same `evaluate()`
+call that was already running (previously discarded). Not a new derivation.
+
+Judged against §10.14's two-condition test: `snapshot` is additive read-only
+CLI surface with zero new state and zero new derivation — a projection, not
+a concept. What it does add is *authority*: it is the canonical answer to
+"what is the world," which belongs in the engine, under the lock, derived
+once. Its shape is public API (frozen keys machine-checked against
+`docs/PUBLIC_API.md`), versioned by `snapshot_version` for directional
+evolution like the store schema.

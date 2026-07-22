@@ -591,6 +591,9 @@ class TestRetryAfterTerminal(Base):
 PUBLIC_OUTPUT_KEYS = {
     "id", "readiness", "next_review_version", "status",
     "generated_tasks", "clean", "warnings",
+    # snapshot — the read model for clients (docs/PUBLIC_API.md):
+    "snapshot_version", "tasks", "edges", "skipped", "human_blocked",
+    "type", "from", "to",
 }
 READINESS_VOCAB = {"refine", "explore", "run", "waiting", "terminal", "human"}
 
@@ -1491,3 +1494,119 @@ class TestExploreDisposition(Base):
         t = self.reload(t)
         self.assertEqual(tasks.evaluate(t)["readiness"], "refine")
         self.assertIsNotNone(tasks.active(t, "decision"))
+
+
+class TestSnapshot(Base):
+    """The read model (`snapshot`): an atomic, deterministic projection of
+    the whole store for clients. Provenance rule (DESIGN §10.15): every field
+    is stored state, derived state via existing logic, or snapshot metadata.
+    """
+
+    def cli(self, argv):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(argv)
+        return json.loads(buf.getvalue())
+
+    def test_shape_and_frozen_keys(self):
+        self.make("a")
+        snap = self.cli(["snapshot"])
+        for key in ("snapshot_version", "tasks", "edges", "skipped"):
+            self.assertIn(key, snap)
+        self.assertEqual(snap["snapshot_version"], 1)
+        for row in snap["tasks"]:
+            self.assertIn("id", row)
+            self.assertIn("status", row)
+            self.assertIsInstance(row["readiness"], str)  # routing string
+            self.assertIn(row["readiness"],
+                          {"refine", "explore", "run", "waiting",
+                           "terminal", "human"})
+
+    def test_deterministic_modulo_timestamp(self):
+        self.make("a")
+        self.make("b")
+        s1, s2 = self.cli(["snapshot"]), self.cli(["snapshot"])
+        s1.pop("generated_at"), s2.pop("generated_at")
+        self.assertEqual(s1, s2)
+
+    def test_decision_ref_normalized_as_edge(self):
+        # The hidden fourth semantic edge: decision_ref is stored as a field,
+        # not in edges[], but a client must see it as an edge — it is how a
+        # parent's re-decision reaches a child's spec. Teeth: reverting the
+        # normalization in _task_edges drops exactly this entry.
+        parent = self.make("parent")
+        self.apply(parent, {"artifacts": [
+            {"kind": "decision", "payload": decision_payload()}]}, "explore")
+        parent = self.reload(parent)
+        r = self.apply(parent, {"generated_tasks": [
+            {"title": "kid", "description": "d", "relation": "child"}]},
+            "human")
+        kid_id = r["generated_tasks"][0]
+        edges = self.cli(["snapshot"])["edges"]
+        self.assertIn({"type": "decision_ref", "from": kid_id,
+                       "to": parent["id"], "version": 1}, edges)
+        # Stored edges are flattened alongside it.
+        self.assertIn({"type": "parent", "from": kid_id,
+                       "to": parent["id"]}, edges)
+        self.assertTrue(any(e["type"] == "blocked_by" for e in edges))
+
+    def test_parked_task_carries_raw_human_blocked_event(self):
+        t = self.make()
+        self.apply(t, {"signal": "block_on_human",
+                       "signal_reason": "which provider?"}, "refine")
+        snap = self.cli(["snapshot"])
+        row = next(r for r in snap["tasks"] if r["id"] == t["id"])
+        # The stored event, verbatim — reason and detail, no classification.
+        self.assertEqual(row["human_blocked"]["reason"], "which provider?")
+        self.assertNotIn("kind", row["human_blocked"])
+        # Non-parked tasks do not carry the key.
+        other = self.make("other")
+        snap = self.cli(["snapshot"])
+        other_row = next(r for r in snap["tasks"]
+                         if r["id"] == other["id"])
+        self.assertNotIn("human_blocked", other_row)
+
+    def test_future_schema_task_surfaced_in_skipped(self):
+        # Honesty about blind spots: a snapshot must say "there is a task
+        # here I cannot read", never silently omit it (DESIGN §10.12).
+        self.make("readable")
+        future = {"schema_version": 99, "id": "TASK-future000001",
+                  "title": "from the future"}
+        (Path(self.dir) / "TASK-future000001.json").write_text(
+            json.dumps(future), encoding="utf-8")
+        snap = self.cli(["snapshot"])
+        self.assertEqual(len(snap["tasks"]), 1)
+        self.assertEqual(snap["skipped"], [
+            {"id": "TASK-future000001", "reason": "future_schema",
+             "schema_version": 99}])
+
+    def test_readiness_detail_rides_separately(self):
+        blocker, t = self.make("b"), self.make("t")
+        self.apply(t, {"edges": [
+            {"type": "blocked_by", "target": blocker["id"]}]}, "human")
+        snap = self.cli(["snapshot"])
+        row = next(r for r in snap["tasks"] if r["id"] == t["id"])
+        self.assertEqual(row["readiness"], "waiting")  # bare string, frozen
+        self.assertEqual(row["readiness_detail"]["blocking_ids"],
+                         [blocker["id"]])
+
+    def test_snapshot_acquires_the_store_lock(self):
+        # Atomicity teeth: while another session holds the lock, snapshot
+        # must wait/fail, not read a possibly-torn store. Reverting the
+        # store_lock() in the snapshot dispatch makes this succeed and fail.
+        self.make()
+        old = store.LOCK_ACQUIRE_TIMEOUT
+        store.LOCK_ACQUIRE_TIMEOUT = 0.4
+        try:
+            with store.store_lock():
+                import io
+                import contextlib
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    with self.assertRaises(SystemExit):
+                        tasks.main(["snapshot"])
+                self.assertIn("locked", json.loads(err.getvalue())["error"])
+        finally:
+            store.LOCK_ACQUIRE_TIMEOUT = old

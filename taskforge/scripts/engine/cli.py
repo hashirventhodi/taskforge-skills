@@ -124,6 +124,7 @@ def build_parser():
     sub.add_parser("config")
     sub.add_parser("doctor")
     sub.add_parser("migrate")
+    sub.add_parser("snapshot")
     return p
 
 
@@ -248,3 +249,11 @@ def run_command(args):
     elif args.cmd == "migrate":
         with store.store_lock():
             out(audit.migrate())
+
+    elif args.cmd == "snapshot":
+        # Read-only, but under the lock: a snapshot composed from N task
+        # reads without it could be torn (task A read before a cascade
+        # commits, task B after) — a world state that never existed.
+        from engine import snapshot
+        with store.store_lock():
+            out(snapshot.build_snapshot())

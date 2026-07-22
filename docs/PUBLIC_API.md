@@ -36,7 +36,8 @@ change is a minor bump; from 1.0 on, a major bump):
 The subcommand **names** are stable: `create`, `show`, `list`, `readiness`,
 `blocked-by`, `budget`, `validate`, `apply`, `human-update`, `cancel`,
 `reopen`, `record-review-prompt`, `audit-review`, `config`, `doctor`,
-`migrate`. (Guarded both ways against the engine by the doc-contract suite.)
+`migrate`, `snapshot`. (Guarded both ways against the engine by the
+doc-contract suite.)
 
 ### Exit-code semantics
 
@@ -59,6 +60,7 @@ Only these keys are frozen. Each command may emit **additional** keys that are
 | `blocked-by <id>` | *(array)* | JSON array of task-id strings blocked by `<id>` |
 | `doctor` | `clean` | boolean; store integrity |
 | `validate` | `warnings` | array of non-fatal observations (validity is the exit code) |
+| `snapshot` | `snapshot_version`, `tasks`, `edges`, `skipped`; task rows: `id`, `status`, `readiness`, and `human_blocked` (parked tasks only — the latest stored `human_blocked` event, verbatim); edge rows: `type`, `from`, `to` | the read model: one atomic, deterministic projection of the store, taken under the store lock. `edges` flattens every stored edge **plus `decision_ref` normalized as an edge** (`type: "decision_ref"`, with `version`); `skipped` lists tasks this engine cannot read (`future_schema` / `unreadable`) so the snapshot never silently omits part of the world. Every field is stored state, derived state via existing engine logic, or snapshot metadata — nothing else (DESIGN §10.15) |
 
 **`readiness` is always the routing string** — its one meaning across the
 entire CLI. Diagnostic detail (why a task routes where it does) is available
@@ -78,6 +80,14 @@ status
 generated_tasks
 clean
 warnings
+snapshot_version
+tasks
+edges
+skipped
+human_blocked
+type
+from
+to
 ```
 
 ### Readiness routing vocabulary
@@ -114,5 +124,13 @@ so that freedom is explicit.
 - **Result-application internals.** `apply`'s `applied`, `duplicate_of`,
   `note`, and `warnings` keys communicate idempotency/validation detail, not
   a frozen contract.
+- **Snapshot informational fields.** `generated_at`, `store`, and each task
+  row's `readiness_detail` (the same diagnostic detail `readiness <id>`
+  returns — `readiness` itself stays the bare routing string everywhere) plus
+  the convenience projection fields (`title`, `active_artifacts`,
+  `pending_escalation`, `decision_ref`, `source`, timestamps). Additions to
+  the snapshot must satisfy the provenance rule (stored / derived-by-existing-
+  logic / snapshot metadata — DESIGN §10.15); a field that fails it is
+  presentation logic and belongs in a client.
 - **Error message wording.** Exit codes and the presence of `{"error": …}` on
   stderr are stable; the message text is not.

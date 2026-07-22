@@ -137,6 +137,9 @@ run it.
 python3 $SCRIPT doctor           # integrity: dangling edges, bad refs,
                                  # cycles, unaudited reviews
 python3 $SCRIPT migrate          # after upgrading taskforge
+python3 $SCRIPT snapshot         # atomic read model of the whole store —
+                                 # for clients/tooling (docs/PUBLIC_API.md);
+                                 # skills route per-task via readiness
 ```
 
 Run `doctor` when anything looks inconsistent, after manual git operations

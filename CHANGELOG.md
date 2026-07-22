@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — the read model: `snapshot`
+- **`tasks.py snapshot`** — one atomic, deterministic projection of the whole
+  store, for clients and tooling (the read API a web UI will build on; the
+  CLI and any future UI stay peer clients of the same engine). Taken under
+  the existing store lock so it is never torn mid-cascade; sorted and
+  byte-deterministic except `generated_at`. Every field traces to stored
+  state, derived state via existing engine logic, or snapshot metadata —
+  the provenance rule that governs all future additions (DESIGN §10.15).
+- `edges[]` normalizes **`decision_ref` as a first-class edge** alongside the
+  stored edge types, so no client needs special knowledge that one semantic
+  edge is stored differently. Parked tasks carry their latest `human_blocked`
+  event **verbatim** (no engine-side classification — rendering categories
+  belong to clients). `skipped[]` surfaces tasks this engine cannot read
+  (future-schema, unreadable) instead of silently omitting them.
+- Task rows pair the frozen `readiness` routing string with a separate
+  informational `readiness_detail` (same data the `readiness <id>` command
+  returns, same `evaluate()` call — no new derivation).
+- The snapshot shape is **public API**: frozen keys declared in
+  `docs/PUBLIC_API.md`, machine-checked against the contract test, versioned
+  by `snapshot_version`. Zero new engine state or derivation — a projection,
+  not a concept.
+
 ## [0.4.0] - 2026-07-22
 
 First-class **Explore**: two changes that together make Explore a stage, not
