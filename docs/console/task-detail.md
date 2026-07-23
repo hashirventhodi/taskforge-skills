@@ -25,6 +25,15 @@ URL) · the immutable description, always visible. The description is the
 ground truth of what was asked; every judgment on this screen is made against
 it, so it never hides behind a click.
 
+The description (a GitHub issue body) and the other prose fields render as
+markdown (GFM subset — headers, bold/italic, inline + fenced code, lists,
+tables, blockquotes, safe links; principle 11). Real usage motivated this:
+the raw text is dense, and the spec `scope` field is dominated by backtick
+file references that only become scannable as inline-code chips. The title,
+id, and chips stay literal (never markdown). A **raw** toggle on the
+description swaps the rendered view for the exact source bytes the engine
+holds (principle 7 — the immutable intake text is never hidden).
+
 ### The story — the artifact chain as cycles, not a list
 
 The fixture's raw history is 16 events; the human's question is "why is this

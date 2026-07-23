@@ -155,5 +155,36 @@ class TestWrites(ConsoleBase):
         self.assertEqual(status, 400)
 
 
+class TestMarkdownWiring(ConsoleBase):
+    """The markdown renderer stays wired. Semantic + XSS coverage lives in the
+    browser assertion page (console/static/md-test.html) because rendering is
+    client-side and CI is Python-only; this guards the plumbing deterministically
+    so the renderer can't be silently unhooked or mis-served."""
+
+    STATIC = ROOT / "console" / "static"
+
+    def test_md_js_served_as_javascript(self):
+        with urllib.request.urlopen(self.base + "/md.js") as r:
+            self.assertEqual(r.status, 200)
+            self.assertIn("javascript", r.headers.get("Content-Type", ""))
+            self.assertIn(b"renderMarkdown", r.read())
+
+    def test_index_loads_md_before_app(self):
+        html = (self.STATIC / "index.html").read_text()
+        self.assertIn('src="/md.js"', html)
+        self.assertLess(html.index('src="/md.js"'), html.index('src="/app.js"'),
+                        "md.js must load before app.js (app.js calls renderMarkdown)")
+
+    def test_md_defines_the_public_renderers(self):
+        src = (self.STATIC / "md.js").read_text()
+        for name in ("renderMarkdown", "renderMarkdownInline", "safeHref"):
+            self.assertIn(name, src)
+
+    def test_test_page_is_served(self):
+        with urllib.request.urlopen(self.base + "/md-test.html") as r:
+            self.assertEqual(r.status, 200)
+            self.assertIn(b"__mdTestResult", r.read())
+
+
 if __name__ == "__main__":
     unittest.main()

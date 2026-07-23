@@ -52,3 +52,17 @@ pixel was drawn. Screen designs cite them; changes to them belong here, once.
     (`scripts/make_fixtures.py`); the fixtures are the design's test data and
     its living spec. A proposed element with no producing state is invented
     behavior.
+
+11. **Rendered text is never a trust boundary.** The client may *format* prose
+    for readability (markdown — interpretation, per principle 4), but the
+    renderer (`md.js`) emits only its own fixed tag set, escapes every piece of
+    input text at the leaves, and allowlists link protocols
+    (`http`/`https`/`mailto`; a `javascript:`/`data:` URL drops the link).
+    There is no parse-then-sanitize step because there is no raw-HTML surface
+    to sanitize: a `<script>` in a task description becomes the literal text
+    `<script>`. This is why no third-party parser or sanitizer is vendored —
+    the safety is structural, not dependency-supplied. Structural text
+    (titles, ids, chips, actor names) is never rendered as markdown; it is
+    escaped verbatim, so a `*` in a title stays a `*`. Security coverage lives
+    in `console/static/md-test.html` (construct correctness + XSS-inert cases);
+    `tests/test_console.py` guards that the renderer stays wired.

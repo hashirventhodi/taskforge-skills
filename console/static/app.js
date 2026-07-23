@@ -4,7 +4,10 @@
  * /api/task (the engine's snapshot + show/budget, verbatim); every button is
  * an existing engine command via /api/command; readiness is data, never
  * re-derived; the client interprets (sections, grouping, emphasis) but never
- * decides. All engine text is rendered escaped, verbatim.
+ * decides. Structural text (titles, ids, chips, actors) is escaped verbatim
+ * via esc(); prose fields (description, ask, artifact summaries, findings)
+ * are rendered as markdown via renderMarkdown()/renderMarkdownInline() — safe
+ * by construction, never a trust boundary (md.js; principle 11).
  */
 "use strict";
 
@@ -331,7 +334,7 @@ function homeCard(item) {
   const t = item.task;
   return `<div class="card" data-task="${esc(t.id)}">
     ${cardHead(t, item)}
-    <div class="ask">${esc(item.hb.reason)}</div>
+    <div class="ask md">${renderMarkdown(item.hb.reason)}</div>
     ${composerHTML(item)}
   </div>`;
 }
@@ -364,14 +367,21 @@ async function renderTask(id) {
     html += `<p class="small muted">source: ${/^https?:/.test(ref)
       ? `<a href="${esc(ref)}" target="_blank" rel="noopener">${esc(ref)}</a>` : esc(ref)}</p>`;
   }
-  html += `<div class="desc">${esc(task.description)}</div>
+  // Description renders as markdown (interpretation, principle 4); the raw
+  // toggle keeps the immutable intake text reachable byte-for-byte
+  // (principle 7). The escaped source is stashed on the element, not in a
+  // second render, so raw is always exactly what the engine holds.
+  html += `<div class="desc md" data-raw="${esc(task.description)}">
+             <button class="raw-toggle" data-act="toggle-raw">raw</button>
+             <div class="desc-body">${renderMarkdown(task.description)}</div>
+           </div>
            <p class="small muted">The immutable intake text — every judgment below is made against it.</p>`;
 
   html += `<h2>The story</h2><div class="story">${storyHTML(task, budget, row)}</div>`;
 
   if (info && info.cause !== "cycle") {
     html += `<h2>The ask</h2><div class="card" data-task="${esc(task.id)}">
-      <div class="ask">${esc(info.hb.reason)}</div>${composerHTML({ ...info, task: row })}</div>`;
+      <div class="ask md">${renderMarkdown(info.hb.reason)}</div>${composerHTML({ ...info, task: row })}</div>`;
   }
 
   html += `<h2>Actions</h2><div class="card" data-task-actions="1"><div class="actions">`;
@@ -390,6 +400,28 @@ async function renderTask(id) {
       <td>${esc(e.reason || "")}</td></tr>`).join("")}</table></details>`;
 
   $app.innerHTML = html;
+
+  // Description raw toggle: swap the rendered markdown for the exact escaped
+  // source bytes the engine holds, and back (principle 7).
+  const descEl = $app.querySelector(".desc[data-raw]");
+  if (descEl) {
+    const body = descEl.querySelector(".desc-body");
+    const rendered = body.innerHTML;
+    const btn = descEl.querySelector('[data-act="toggle-raw"]');
+    let raw = false;
+    btn.addEventListener("click", () => {
+      raw = !raw;
+      btn.textContent = raw ? "rendered" : "raw";
+      if (raw) {
+        const pre = document.createElement("pre");
+        pre.className = "md-raw";
+        pre.textContent = descEl.dataset.raw;   // exact bytes, via textContent
+        body.replaceChildren(pre);
+      } else {
+        body.innerHTML = rendered;
+      }
+    });
+  }
 
   if (info && info.cause !== "cycle") {
     const card = $app.querySelector(`[data-task="${CSS.escape(task.id)}"]`);
@@ -427,9 +459,9 @@ function storyHTML(task, budget, row) {
   for (const kind of ["decision", "specification"]) {
     const a = active(kind);
     if (a) h += `<div class="story-row kind-${kind}"><span class="story-kind">${kind} v${a.version}</span>
-      <span class="story-body">${esc(summaryOf(kind, a.payload))}</span></div>`;
+      <div class="story-body md">${renderMarkdown(summaryOf(kind, a.payload))}</div></div>`;
     for (const s of superseded(kind))
-      h += `<div class="superseded">↳ ${kind} v${s.version} superseded — ${esc(s.superseded_reason || "")}</div>`;
+      h += `<div class="superseded">↳ ${kind} v${s.version} superseded — ${renderMarkdownInline(s.superseded_reason || "")}</div>`;
   }
 
   // Attempts: an implementation+review pair is one unit; pair by version.
@@ -446,7 +478,7 @@ function storyHTML(task, budget, row) {
         ${rev ? `<br>${rev.payload.verdict === "approved" ? "✓ approved"
           : `✗ rejected: ${esc(rev.payload.root_cause || "")}`}` : ""}
         ${rejected && rev.payload.findings ? rev.payload.findings.map(f =>
-          `<br><span class="finding">— ${esc(f)}</span>`).join("") : ""}</span></div>`;
+          `<br><span class="finding">— ${renderMarkdownInline(f)}</span>`).join("") : ""}</span></div>`;
   });
   // Repetition is the diagnosis: same root_cause rejected 2+ times.
   const causeCounts = rejectedCauses.reduce((m, c) => (m[c] = (m[c] || 0) + 1, m), {});
@@ -462,7 +494,7 @@ function storyHTML(task, budget, row) {
   if (task.status === "blocked_on_human") {
     const hb = [...task.history].reverse().find(e => e.type === "human_blocked");
     if (hb) h += `<div class="story-row park"><span class="story-kind">parked</span>
-      <span class="story-body">${esc(hb.reason)} <span class="muted">(${esc(ago(hb.at))})</span></span></div>`;
+      <span class="story-body">${renderMarkdownInline(hb.reason)} <span class="muted">(${esc(ago(hb.at))})</span></span></div>`;
   }
   return h || `<p class="muted">No artifacts yet — this task hasn't been worked.</p>`;
 }

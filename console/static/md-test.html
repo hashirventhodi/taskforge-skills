@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>md.js — renderer tests</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 18px; }
+  #summary { padding: 10px 14px; border-radius: 6px; font-weight: 600; margin: 12px 0; }
+  #summary.pass { background: #e6f6ec; color: #1c5a32; }
+  #summary.fail { background: #fdeaea; color: #7a1a15; }
+  .case { border-left: 3px solid #ccc; padding: 4px 12px; margin: 4px 0; }
+  .case.pass { border-color: #1c7a3d; }
+  .case.fail { border-color: #b3261e; background: #fdf3f2; }
+  .case .name { font-weight: 600; }
+  .case pre { background: #f5f5f5; padding: 6px 8px; border-radius: 4px; overflow-x: auto;
+              font-size: 12px; margin: 4px 0; white-space: pre-wrap; }
+  code { background: #f1f3f5; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>md.js renderer tests</h1>
+<p>Construct correctness + XSS-inert-by-construction. All must pass.</p>
+<div id="summary">running…</div>
+<div id="cases"></div>
+
+<script src="/md.js"></script>
+<script>
+"use strict";
+const results = [];
+function ok(name, cond, detail) { results.push({ name, pass: !!cond, detail: detail || "" }); }
+function esc(s) { return String(s).replace(/[&<>"']/g,
+  c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+/* Render into a detached DOM node so we can inspect the actual tree — the real
+ * question for XSS is "what nodes/attributes exist in the DOM", not string
+ * matching. */
+function dom(src) {
+  const d = document.createElement("div");
+  d.innerHTML = renderMarkdown(src);
+  return d;
+}
+function has(src, sel) { return dom(src).querySelector(sel) !== null; }
+function textOf(src) { return dom(src).textContent; }
+
+/* ---- construct correctness ---- */
+ok("heading -> <h2>", has("## Summary", "h2") && textOf("## Summary").trim() === "Summary");
+ok("bold -> <strong>", has("a **b** c", "strong"));
+ok("italic -> <em>", has("a *b* c", "em"));
+ok("inline code -> <code>", has("call `foo()` now", "code") &&
+   dom("call `foo()` now").querySelector("code").textContent === "foo()");
+ok("fenced code -> <pre><code>", has("```\nline1\nline2\n```", "pre code") &&
+   dom("```\na < b\n```").querySelector("code").textContent === "a < b");
+ok("unordered list -> <ul><li>", (function () {
+  const d = dom("- one\n- two"); return d.querySelectorAll("ul > li").length === 2; })());
+ok("ordered list -> <ol><li>", (function () {
+  const d = dom("1. one\n2. two"); return d.querySelectorAll("ol > li").length === 2; })());
+ok("nested list", (function () {
+  const d = dom("- a\n  - a1\n- b"); return d.querySelector("ul ul li") !== null; })());
+ok("table -> <table> with header+rows", (function () {
+  const d = dom("| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |");
+  return d.querySelectorAll("th").length === 2 && d.querySelectorAll("tbody tr").length === 2; })());
+ok("blockquote -> <blockquote>", has("> quoted", "blockquote"));
+ok("thematic break -> <hr>", has("---", "hr"));
+ok("paragraphs split on blank line", dom("a\n\nb").querySelectorAll("p").length === 2);
+ok("safe link renders <a> with target+rel", (function () {
+  const a = dom("[site](https://example.com)").querySelector("a");
+  return a && a.getAttribute("href") === "https://example.com" &&
+         a.getAttribute("rel") === "noopener noreferrer"; })());
+
+/* ---- real-content regressions (found on the sourcegrid store) ---- */
+ok("underscores inside identifiers stay literal (no spurious italic)", (function () {
+  const d = dom("call message_queue_consumer.py and interaction_history now");
+  return d.querySelector("em") === null &&
+         d.textContent.indexOf("message_queue_consumer.py") !== -1; })());
+ok("word-boundary _emphasis_ still italicizes", has("this is _important_ ok", "em"));
+ok("loose ordered list (blanks between items) is one <ol> numbered 1..3", (function () {
+  const d = dom("1. first\n\n2. second\n\n3. third");
+  return d.querySelectorAll("ol").length === 1 &&
+         d.querySelectorAll("ol > li").length === 3; })());
+ok("ordered list starting at 2 keeps its number", (function () {
+  const ol = dom("2. two\n3. three").querySelector("ol");
+  return ol && ol.getAttribute("start") === "2"; })());
+
+/* ---- XSS inert by construction ---- */
+ok("raw <script> becomes literal text, no script node", (function () {
+  const d = dom("hello <script>alert(1)<\/script> world");
+  return d.querySelector("script") === null &&
+         d.textContent.indexOf("<script>") !== -1; })());
+ok("raw <img onerror> not emitted as an element", (function () {
+  const d = dom("x <img src=x onerror=alert(1)> y");
+  return d.querySelector("img") === null; })());
+ok("javascript: link dropped (no href, label kept)", (function () {
+  const d = dom("[click](javascript:alert(1))");
+  const a = d.querySelector("a");
+  return a === null && d.textContent.indexOf("click") !== -1; })());
+ok("data: link dropped", dom("[x](data:text/html,<script>1<\/script>)").querySelector("a") === null);
+ok("vbscript: link dropped", dom("[x](vbscript:msgbox)").querySelector("a") === null);
+ok("html inside inline code is literal", (function () {
+  const d = dom("`<b>not bold</b>`");
+  return d.querySelector("code b") === null &&
+         d.querySelector("code").textContent === "<b>not bold</b>"; })());
+ok("html inside fenced code is literal", (function () {
+  const d = dom("```\n<img src=x onerror=alert(1)>\n```");
+  return d.querySelector("img") === null &&
+         d.querySelector("code").textContent.indexOf("<img") === 0; })());
+ok("html comment becomes literal text", (function () {
+  const d = dom("before <!-- secret --> after");
+  return d.innerHTML.indexOf("<!--") === -1 &&
+         d.textContent.indexOf("<!-- secret -->") !== -1; })());
+ok("attribute-breakout via quote in link is neutralized", (function () {
+  // a crafted label/url must never produce a stray attribute
+  const d = dom('[a](https://x" onmouseover="alert(1))');
+  const a = d.querySelector("a");
+  // href is rejected (contains space) -> no anchor, or if anchor, no onmouseover
+  return !a || a.getAttribute("onmouseover") === null; })());
+ok("no element ever carries an on* handler", (function () {
+  const d = dom("**b** [l](https://x) `c`\n\n<img onerror=alert(1)>");
+  return [...d.querySelectorAll("*")].every(function (el) {
+    return [...el.attributes].every(function (at) { return !/^on/i.test(at.name); });
+  }); })());
+
+/* ---- report ---- */
+const passed = results.filter(function (r) { return r.pass; }).length;
+const total = results.length;
+const sum = document.getElementById("summary");
+sum.className = passed === total ? "pass" : "fail";
+sum.textContent = passed === total
+  ? "ALL PASS — " + total + " assertions"
+  : (total - passed) + " FAILED of " + total;
+document.getElementById("cases").innerHTML = results.map(function (r) {
+  return '<div class="case ' + (r.pass ? "pass" : "fail") + '">' +
+    '<span class="name">' + (r.pass ? "PASS" : "FAIL") + " — " + esc(r.name) + "</span>" +
+    (r.detail ? "<pre>" + esc(r.detail) + "</pre>" : "") + "</div>";
+}).join("");
+/* Machine-readable hook for automated verification. */
+window.__mdTestResult = { passed: passed, total: total, ok: passed === total };
+</script>
+</body>
+</html>

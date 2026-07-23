@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — markdown rendering in the Console
+- **Prose fields render as markdown** (the description, the ask, artifact
+  summaries, review findings) — the first reality-driven UI change, motivated
+  by running the Console on a real store where GitHub-issue prose rendered as
+  a flat wall and backtick-dense spec text was unscannable. New
+  `console/static/md.js`: a self-contained GFM-subset renderer (headers,
+  bold/italic, inline + fenced code, lists, tables, blockquotes, safe links).
+  Structural text (titles, ids, chips, actors) stays literal. The description
+  gains a **raw** toggle to the exact source bytes (principle 7).
+- **Safe by construction, no dependency.** The renderer never emits
+  input-derived HTML — it emits only its own tags, escapes all input at the
+  leaves, and allowlists link protocols (`http`/`https`/`mailto`; drops
+  `javascript:`/`data:`). No parser or sanitizer is vendored because there is
+  no raw-HTML surface to sanitize (design principle 11, DESIGN §10.17).
+  Security + correctness coverage in `console/static/md-test.html` (27
+  browser assertions incl. XSS-inert cases); `tests/test_console.py` guards
+  the wiring.
+- Real content immediately caught two correctness bugs synthetic samples had
+  not — underscores inside identifiers (`message_queue_consumer`) causing
+  spurious italics, and loose ordered lists splitting/renumbering — both
+  fixed and pinned by regression cases.
+
 ## [0.5.0] - 2026-07-22
 
 The **Human Console** release: TaskForge gains its second client. The

@@ -69,7 +69,9 @@ Everything on a card comes from the snapshot row; opening the card may fetch
 
 **All cards:** title · task id · time parked (`human_blocked.at`) · the ask
 (`human_blocked.reason`, verbatim — it was written to be sufficient for a
-one-message answer, so the card's body *is* the skill's own text).
+one-message answer, so the card's body *is* the skill's own text). The ask
+renders as markdown (principle 11) so its numbered decompositions and code
+references read as such; the title stays literal.
 
 **Approve — topology proposal** (fixture: SSO login). Context chip
 `decision v1` from `active_artifacts`. The reason carries the numbered

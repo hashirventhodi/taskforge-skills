@@ -833,3 +833,39 @@ attribution bug (human_blocked recorded the wrong actor) and, during live
 browser testing, a client bug (background refresh destroying in-progress
 composer input). Designing against states the engine actually produces is
 recorded here as the standing method for client work.
+
+### v0.5.x — §10.17 markdown in the Console: escape-by-construction
+
+Running the Console on a real store (sourcegrid) surfaced the first
+reality-driven UI need: task prose is GitHub-issue markdown, rendered as a
+flat wall. The design question was how to render it *safely* — task text is
+untrusted (issue bodies, human notes).
+
+The standard web answer is "parse to HTML, then run DOMPurify." We rejected
+it, and the reasoning is the record worth keeping. That pipeline exists
+because parsers (marked, markdown-it) deliberately pass *input* HTML through,
+so a sanitizer must claw it back. Our threat model is the opposite: we want
+the *formatting*, never embedded HTML. So the correct architecture is a
+renderer that **never emits input-derived HTML** — `console/static/md.js`
+emits only its own fixed tag set, routes every input text run through
+`escapeHtml()` at the leaves, and allowlists link protocols (`safeHref`:
+http/https/mailto only; the `javascript:`/`data:` vector behind
+CVE-2025-24981 is dropped to plain text). There is no raw-HTML surface, so
+there is nothing to sanitize and no sanitizer to keep current — the safety is
+structural. This also holds the project's zero-dependency, no-build line: no
+first-ever third-party JS, no CVE treadmill. The cost, accepted openly, is
+that it covers the GFM subset real content uses and degrades exotic markdown
+to escaped text rather than being full CommonMark.
+
+The honesty note: the *risk* of a hand-rolled renderer was never XSS
+(construction handles that) but *rendering correctness*, and real content
+proved it immediately — the first sourcegrid description exposed two bugs the
+fixture set had not: underscores inside identifiers (`message_queue_consumer`)
+triggering spurious italics, and loose ordered lists (blank lines between
+items) splitting into separate `1.`-restarting lists. Both are known markdown
+edge cases; both were fixed (GFM intraword-underscore flanking; a loose/
+nested/start-aware list parser) and pinned by regression cases in the browser
+test page. The lesson is the §10.15 method applied to a renderer: **real
+prose, not synthetic samples, is the test corpus** — which is exactly why the
+renderer's security *and* correctness live in `console/static/md-test.html`
+(browser-verified) rather than in synthetic assertions alone.

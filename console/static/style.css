@@ -90,6 +90,48 @@ details summary { cursor: pointer; color: #556; font-size: 13px; }
 pre.payload { background: #f8f9fa; border: 1px solid #eceef0; border-radius: 6px;
               padding: 10px; overflow-x: auto; font-size: 12px; }
 
+/* Markdown-rendered prose (md.js). The renderer emits real block elements, so
+ * where a container used white-space:pre-wrap for plain text, .md turns it
+ * off. Deliberately quiet — headers are modest because they sit inside cards. */
+.md { white-space: normal; position: relative; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 8px; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  margin: 14px 0 6px; line-height: 1.3; font-weight: 650; }
+.md h1 { font-size: 16px; }
+.md h2 { font-size: 15px; }
+.md h3 { font-size: 14px; }
+.md h4, .md h5, .md h6 { font-size: 13px; color: #333; }
+.md code { background: #eef0f2; color: #333; padding: 1px 5px; border-radius: 4px;
+           font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+.md a { color: #2456c4; }
+.md ul, .md ol { margin: 4px 0 8px; padding-left: 22px; }
+.md li { margin: 2px 0; }
+.md li > ul, .md li > ol { margin: 2px 0; }
+.md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid #d3d7dc;
+                 color: #556; }
+.md hr { border: 0; border-top: 1px solid #e3e5e8; margin: 12px 0; }
+.md pre.md-code { background: #f6f8fa; border: 1px solid #e3e5e8; border-radius: 6px;
+                  padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+.md pre.md-code code { background: none; padding: 0; font-size: 12px; color: #24292f;
+                       white-space: pre; }
+.md table.md-table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px;
+                     display: block; overflow-x: auto; max-width: 100%; }
+.md table.md-table th, .md table.md-table td {
+  border: 1px solid #dfe2e5; padding: 5px 10px; text-align: left; }
+.md table.md-table th { background: #f6f8fa; font-weight: 600; }
+.md table.md-table tbody tr:nth-child(2n) { background: #fafbfc; }
+
+/* Description raw toggle */
+.desc.md { padding-top: 26px; }
+.raw-toggle { position: absolute; top: 6px; right: 8px; font-size: 11px;
+              padding: 1px 8px; border-radius: 10px; border: 1px solid #e0d9b8;
+              background: #fdfbee; color: #8a7a2a; cursor: pointer; }
+.raw-toggle:hover { background: #f6f0d8; }
+pre.md-raw { white-space: pre-wrap; font: 12.5px/1.5 ui-monospace, Menlo, monospace;
+             margin: 0; color: #4a4636; }
+
 /* Board */
 .board { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; }
 .column { background: #eef0f2; border-radius: 8px; padding: 10px; min-width: 200px; flex: 1; }
