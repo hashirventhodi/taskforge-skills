@@ -38,6 +38,14 @@ _spec = importlib.util.spec_from_file_location(
 tasks = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(tasks)
 
+# The presentation layer (docs/PROJECTION_API.md): read-only, pure composition
+# of engine facts. The Web UI renders these projections; the CLI renders the
+# same ones. Served here as JSON — the HTTP layer is just a transport.
+_pspec = importlib.util.spec_from_file_location(
+    "projections", ROOT / "taskforge" / "scripts" / "projections.py")
+projections = importlib.util.module_from_spec(_pspec)
+_pspec.loader.exec_module(projections)
+
 # The only write commands the Console may issue: the human actor's surface.
 WRITE_COMMANDS = {"human-update", "cancel", "reopen", "create"}
 # Free-text fields per command -> the file-input flag that carries them.
@@ -120,8 +128,35 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def serve_projection(self, name):
+        """Render one projection to JSON. Read-only, no arguments beyond the
+        task id / since query — pure presentation-layer composition."""
+        from urllib.parse import parse_qs, urlparse
+        try:
+            if name == "board":
+                return self.send_json(200, projections.board())
+            if name == "health":
+                return self.send_json(200, projections.health())
+            if name == "digest":
+                since = parse_qs(urlparse(self.path).query).get(
+                    "since", ["1970-01-01T00:00:00+00:00"])[0]
+                return self.send_json(200, projections.digest(since))
+            for prefix, fn in (("task/", projections.task),
+                               ("feature/", projections.feature),
+                               ("review/", projections.review)):
+                if name.startswith(prefix):
+                    tid = name[len(prefix):]
+                    if not tid.startswith("TASK-"):
+                        return self.send_json(400, {"error": "bad task id"})
+                    return self.send_json(200, fn(tid))
+        except tasks.TaskforgeError as exc:
+            return self.send_json(404, {"error": str(exc)})
+        return self.send_json(404, {"error": "unknown projection"})
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path.startswith("/api/p/"):
+            return self.serve_projection(path[len("/api/p/"):])
         if path == "/api/snapshot":
             return self.send_json(*run_cli(["snapshot"]))
         if path.startswith("/api/task/"):
