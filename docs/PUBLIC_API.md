@@ -35,7 +35,7 @@ change is a minor bump; from 1.0 on, a major bump):
 
 The subcommand **names** are stable: `create`, `show`, `list`, `readiness`,
 `blocked-by`, `budget`, `validate`, `apply`, `human-update`, `cancel`,
-`reopen`, `record-review-prompt`, `audit-review`, `config`, `doctor`,
+`reopen`, `build-review-prompt`, `audit-review`, `config`, `doctor`,
 `migrate`, `snapshot`. (Guarded both ways against the engine by the
 doc-contract suite.)
 

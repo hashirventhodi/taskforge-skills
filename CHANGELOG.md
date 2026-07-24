@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — engine-owned reviewer-prompt assembly (v0.6.0)
+- **`build-review-prompt <id> --diff <file> --results <file> [--version N]`** —
+  the engine now assembles and records the reviewer prompt from the active
+  specification, the diff, and the test results, in one deterministic step.
+  Clients no longer hand-serialize the spec into the prompt template.
+- **Fixes a real audit false-negative found while running TaskForge on
+  SourceGrid.** Hand assembly used `json.dumps`, which escaped embedded quotes
+  (`delivery.status == "failed"` → `\"failed\"`) and non-ASCII (`—` →
+  `—`). `audit-review` matches each acceptance criterion by verbatim
+  substring, so an escaped-but-present criterion looked *absent* — flagging
+  genuinely-isolated reviews as isolation failures (twice, on clean work). The
+  engine now renders spec fields as **verbatim** labeled text (never JSON), so
+  `audit-review`'s existing check holds by construction. The audit logic is
+  unchanged; the bug was only ever in client-side serialization.
+- **Deterministic:** the same `(spec, diff, results)` renders byte-identical
+  output and digest. A code comment records *why not canonical JSON* (RFC 8785
+  fixes serialization stability, not escape-freedom — the audit needs the
+  latter) so the fix is not reverted backward.
+### Removed — `record-review-prompt` (pre-release, no compat promise)
+- The hand-assembly command is **gone**, not deprecated. It was the sole way
+  to introduce the serialization mismatch above, and `build-review-prompt`
+  replaces it entirely — one correct way to produce a review prompt, no
+  footgun kept for "compatibility" in a pre-release engine. The low-level
+  write/event recorder survives only as an internal helper (`_record_prompt`),
+  used by `build-review-prompt` and by the audit suite to inject adversarial
+  prompts. `audit-review` is unchanged. `REVIEWER_PREAMBLE` is single-sourced
+  in the engine and guarded against doc drift by a new doc-contract test.
+
 ### Added — markdown rendering in the Console
 - **Prose fields render as markdown** (the description, the ask, artifact
   summaries, review findings) — the first reality-driven UI change, motivated

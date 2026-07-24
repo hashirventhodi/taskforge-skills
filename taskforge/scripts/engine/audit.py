@@ -1,14 +1,129 @@
-"""Auditing and maintenance: reviewer-isolation verification, store
-integrity (doctor), and schema migration."""
+"""Review-prompt assembly, isolation auditing, and store maintenance.
+
+The engine owns reviewer-prompt construction (``build_review_prompt``) so the
+prompt the reviewer sees, and the canonical text ``audit_review`` checks, are
+produced by one deterministic renderer — a client can never introduce a
+serialization/escaping mismatch between them.
+"""
 import hashlib
 import json
 
 from engine import store
-from engine.model import SCHEMA_VERSION, TERMINAL, record
+from engine.model import SCHEMA_VERSION, TERMINAL, active, record
 from engine.readiness import evaluate
 
+# The reviewer instruction preamble — the reviewer's *behavior*, held byte
+# for byte. It is duplicated, verbatim, in references/reviewer-prompt.md for
+# human readers; a doc-contract test asserts the two never diverge. Everything
+# after it (the Specification / Code diff / Test results sections) is assembled
+# per review by build_review_prompt.
+REVIEWER_PREAMBLE = """\
+You are an independent code reviewer. You have not seen this implementation
+being produced, and you must judge only what is in front of you: the
+specification, the code diff, and the test results. Do not assume good
+intentions you cannot see in the diff; do not penalize approaches merely for
+being different from what you would have done.
 
-def record_review_prompt(task_id, version, prompt_text):
+Verify each acceptance criterion explicitly against the diff and the test
+results. Approve only if the diff satisfies the specification and the tests
+support that conclusion. Watch for: criteria with no corresponding change or
+test, changes beyond the specification's scope, tests that pass without
+exercising the criterion, and failure/edge cases the specification names.
+
+If you reject, classify exactly one root cause:
+
+* `implementation` — the code is wrong or incomplete against a valid
+  specification. Findings must be actionable (file, behavior, criterion).
+* `specification` — the specification itself is ambiguous, contradictory, or
+  unimplementable as written. Name the defective clause.
+* `architecture` — no implementation of this approach can satisfy the
+  requirements. Explain why the approach, not this code, is the problem.
+
+Respond with ONLY a JSON object, no prose, no markdown fences:
+
+{
+  "verdict": "approved" | "rejected",
+  "criteria_results": [{"criterion": "...", "passed": true, "note": "..."}],
+  "findings": ["specific, actionable finding"],
+  "root_cause": "implementation" | "specification" | "architecture"
+}
+(root_cause is required if and only if verdict is "rejected")"""
+
+# Specification fields rendered into the prompt, in this fixed order. List
+# fields become verbatim bullets; scalar fields a verbatim line. Order is
+# fixed (not dict iteration order) so the render is a pure function of the
+# payload — same spec -> same bytes -> same digest.
+_SPEC_LIST_FIELDS = ("acceptance_criteria", "constraints",
+                     "assumptions", "edge_cases")
+_SPEC_LABELS = {
+    "acceptance_criteria": "Acceptance criteria",
+    "constraints": "Constraints",
+    "assumptions": "Assumptions",
+    "edge_cases": "Edge cases",
+}
+
+
+def _render_spec(version, payload):
+    """Render a specification payload as VERBATIM labeled text.
+
+    Deliberately not JSON. JSON string encoding escapes embedded quotes
+    (``"failed"`` -> ``\\"failed\\"``) and, with ensure_ascii, non-ASCII
+    (``—`` -> ``\\u2014``). audit_review checks each acceptance criterion by
+    verbatim substring, so any escaping makes a genuinely-present criterion
+    look absent — the exact false-negative this renderer removes. Canonical
+    JSON (RFC 8785) fixes serialization *stability* but NOT escape-freedom, so
+    it would not help here. Verbatim text is what makes the audit sound.
+    """
+    lines = [f"## Specification (version {version})", ""]
+    scope = payload.get("scope")
+    if scope:
+        lines += ["Scope:", scope, ""]
+    for field in _SPEC_LIST_FIELDS:
+        items = payload.get(field) or []
+        if items:
+            lines.append(f"{_SPEC_LABELS[field]}:")
+            lines += [f"- {item}" for item in items]
+            lines.append("")
+    if "adopted_from_source" in payload:
+        lines += [f"adopted_from_source: "
+                  f"{json.dumps(payload['adopted_from_source'])}", ""]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def build_review_prompt(task_id, diff, results, version=None):
+    """Assemble and record the canonical reviewer prompt for a task.
+
+    Renders PREAMBLE + the active specification (verbatim) + the diff + the
+    test results, then records it (file + event + digest). The render is
+    deterministic: the same
+    (spec, diff, results) yields byte-identical output. ``version`` defaults
+    to the next review version. Fails loudly if there is no active spec to
+    review — a review with nothing to judge against is meaningless.
+    """
+    task = store.load(task_id)
+    spec = active(task, "specification")
+    if spec is None:
+        from engine.model import TaskforgeError
+        raise TaskforgeError(
+            f"{task_id} has no active specification to review")
+    if version is None:
+        version = len(task["artifacts"].get("review", [])) + 1
+    prompt = (
+        f"{REVIEWER_PREAMBLE}\n\n"
+        f"{_render_spec(spec['version'], spec['payload'])}\n"
+        f"## Code diff\n\n{diff}\n\n"
+        f"## Test results\n\n{results}\n"
+    )
+    return _record_prompt(task_id, version, prompt)
+
+
+def _record_prompt(task_id, version, prompt_text):
+    """Write a reviewer prompt to the audit dir and event-record its digest.
+
+    Internal: build_review_prompt is the one public way to produce a review
+    prompt. This low-level recorder exists for build to call and for the audit
+    suite to inject adversarial prompts when testing that audit_review catches
+    leaks and missing criteria independently of the renderer."""
     task = store.load(task_id)
     fname = f"{task_id}-review-v{version}.prompt.md"
     (store.audit_dir() / fname).write_text(prompt_text, encoding="utf-8")

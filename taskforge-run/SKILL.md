@@ -45,10 +45,13 @@ result — partial evidence is still evidence.
 
 ## 3. Independent review — recorded, isolated, non-negotiable
 
-Follow `taskforge/references/reviewer-prompt.md` **exactly**: fill the
-three slots (spec verbatim, full diff, test results) and nothing else;
-`record-review-prompt` **before** spawning; fresh-context subagent (Task
-tool); one re-ask on malformed output, then `block_on_human` — never guess a
+Follow `taskforge/references/reviewer-prompt.md` **exactly**: write the diff
+and the test results to two files, then let the engine assemble and record the
+prompt — `build-review-prompt <id> --diff <diff-file> --results <results-file>`
+(it renders the active spec verbatim, so you never hand-serialize it and
+escaping can never desync the prompt from what `audit-review` checks). Spawn a
+fresh-context subagent (Task tool) with the built prompt from the returned
+`file`; one re-ask on malformed output, then `block_on_human` — never guess a
 verdict, never self-review. `audit-review` will later verify your recorded
 prompts deterministically; a review without a recorded prompt is flagged as
 an isolation failure. Record the verdict verbatim as the review artifact,

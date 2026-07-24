@@ -101,7 +101,7 @@ class TestCommandTableMatchesEngine(unittest.TestCase):
     def test_engine_commands_are_documented(self):
         """A new subcommand must surface *somewhere* in the doc set — the hub
         command table, CONTRACTS' result contract (apply/validate), or a
-        workflow skill/reference (record-review-prompt). An engine command no
+        workflow skill/reference (build-review-prompt). An engine command no
         doc mentions is an undiscoverable feature."""
         corpus = "\n".join(read(d) for d in (
             SKILL_FILES + REFERENCE_FILES + [HUB / "CONTRACTS.md"]))
@@ -243,6 +243,28 @@ class TestPublicApiDeclaration(unittest.TestCase):
             f"PUBLIC_API.md and TestPublicOutputContract disagree on the "
             f"frozen key set. Only in doc: {doc - enforced}; only in test: "
             f"{enforced - doc}")
+
+
+class TestReviewerPreambleSingleSourced(unittest.TestCase):
+    """The reviewer preamble is authored once. The engine embeds it as the
+    canonical constant (audit.REVIEWER_PREAMBLE); references/reviewer-prompt.md
+    shows it for human readers. They must not diverge — a maintainer editing
+    one without the other silently changes what reviewers are told vs. what
+    the doc claims."""
+
+    AUDIT = HUB / "scripts" / "engine" / "audit.py"
+    DOC = HUB / "references" / "reviewer-prompt.md"
+
+    def engine_preamble(self):
+        src = read(self.AUDIT)
+        m = re.search(r'REVIEWER_PREAMBLE = """\\\n(.*?)"""', src, re.DOTALL)
+        self.assertIsNotNone(m, "REVIEWER_PREAMBLE constant not found in audit.py")
+        return m.group(1)
+
+    def test_engine_preamble_appears_verbatim_in_the_reference(self):
+        self.assertIn(self.engine_preamble(), read(self.DOC),
+                      "audit.REVIEWER_PREAMBLE and reviewer-prompt.md have "
+                      "diverged — update both, verbatim")
 
 
 class TestUntrustedTextFileForm(unittest.TestCase):

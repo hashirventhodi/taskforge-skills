@@ -116,10 +116,11 @@ def build_parser():
     ro.add_argument("--reason")
     ro.add_argument("--reason-file")
 
-    r = sub.add_parser("record-review-prompt")
-    r.add_argument("id")
-    r.add_argument("file")
-    r.add_argument("--version", type=int, required=True)
+    b = sub.add_parser("build-review-prompt")
+    b.add_argument("id")
+    b.add_argument("--diff", required=True)
+    b.add_argument("--results", required=True)
+    b.add_argument("--version", type=int)
 
     sub.add_parser("config")
     sub.add_parser("doctor")
@@ -235,10 +236,12 @@ def run_command(args):
             t = apply_mod.reopen(store.load(args.id), reason)
         out(summary(t))
 
-    elif args.cmd == "record-review-prompt":
+    elif args.cmd == "build-review-prompt":
+        diff = Path(args.diff).read_text(encoding="utf-8")
+        results = Path(args.results).read_text(encoding="utf-8")
         with store.store_lock():
-            text = Path(args.file).read_text(encoding="utf-8")
-            out(audit.record_review_prompt(args.id, args.version, text))
+            out(audit.build_review_prompt(
+                args.id, diff, results, args.version))
 
     elif args.cmd == "audit-review":
         out(audit.audit_review(args.id))

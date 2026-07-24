@@ -2,33 +2,45 @@
 
 ## Usage protocol (for any skill convening a review)
 
-1. Prepare exactly three inputs: the **active specification** (verbatim
-   payload JSON, with its version number), the **diff** (full content, not a
-   summary), the **test results**.
-2. Fill the template below. Add nothing — the three slots are the complete
-   review input; implementation narrative, plans, reasoning, or chat history
-   are contamination that defeats independent review.
-3. **Record before use** (verifiable isolation): save the filled prompt to a
-   temp file and register it —
-   `python3 $SCRIPT record-review-prompt <task-id> --version <N> <file>`
-   where N is `next_review_version` from `python3 $SCRIPT budget <task-id>`.
+1. Prepare exactly two files: the **diff** (full content, not a summary) and
+   the **test results**. The active specification is not yours to assemble —
+   the engine reads it from the store so the reviewer's prompt and the text
+   `audit-review` checks are one and the same.
+2. **Build and record in one step** — the engine owns assembly:
+   `python3 $SCRIPT build-review-prompt <task-id> --diff <diff-file> --results <results-file>`.
+   It renders the preamble below + the active specification **verbatim** (not
+   JSON — so embedded quotes and non-ASCII in a criterion can never be escaped
+   into an audit false-negative) + the diff + the results, records the prompt,
+   and returns its `file` path and `sha256`. Version defaults to the next
+   review version. Add nothing else: implementation narrative, plans, or chat
+   history are contamination that defeats independent review. Hand assembly is
+   not an option — building the prompt yourself is exactly the serialization
+   footgun `build-review-prompt` exists to remove.
    `audit-review <task-id>` later verifies the recorded prompt contains every
    acceptance criterion and none of the implementation summary.
-4. Spawn a **fresh-context subagent** with the filled prompt. If no
+3. Spawn a **fresh-context subagent** with the built prompt (read it from the
+   returned `file`). If no
    fresh-context mechanism is available in this session, **stop and say
    so** — a self-review from the implementer's context must never be
    recorded as a Review.
-5. **Reviewer output retry policy**: if the output is not valid JSON per the
+4. **Reviewer output retry policy**: if the output is not valid JSON per the
    contract below, re-ask exactly once, quoting the validation error and the
    schema. If still malformed, treat it as a review-system failure: emit
    `signal: block_on_human` with the raw output in `signal_reason`. Never
    guess a verdict; never downgrade to self-review.
-6. Record the verdict verbatim as the review artifact — including rejections
+5. Record the verdict verbatim as the review artifact — including rejections
    you disagree with (disagree in your report, not in the record).
 
 ---
 
-## Template (fill the three slots; change nothing else)
+## Template (rendered by the engine; the preamble below is verbatim)
+
+The engine's `build-review-prompt` assembles this: the preamble below,
+byte for byte, then `## Specification (version N)` with the active spec's
+fields rendered as **verbatim** labeled text (scope, then acceptance criteria
+/ constraints / assumptions / edge cases as bullets), then `## Code diff` and
+`## Test results` with the files you passed. The preamble here is the single
+source for that constant — a doc-contract test asserts the engine matches it.
 
 You are an independent code reviewer. You have not seen this implementation
 being produced, and you must judge only what is in front of you: the
@@ -61,14 +73,31 @@ Respond with ONLY a JSON object, no prose, no markdown fences:
 }
 (root_cause is required if and only if verdict is "rejected")
 
-## Specification (version {SPEC_VERSION})
+---
 
-{SPECIFICATION_JSON}
+The engine appends, after the preamble above:
+
+```
+## Specification (version N)
+
+Scope:
+<scope, verbatim>
+
+Acceptance criteria:
+- <each criterion, verbatim>
+
+Constraints / Assumptions / Edge cases:
+- <verbatim, sections present only when non-empty>
 
 ## Code diff
 
-{DIFF}
+<the --diff file, verbatim>
 
 ## Test results
 
-{TEST_RESULTS}
+<the --results file, verbatim>
+```
+
+Verbatim — never JSON — because `audit-review` matches each acceptance
+criterion by substring; JSON string escaping (`"x"` → `\"x\"`, `—` → `—`)
+would turn a present criterion into an audit false-negative.

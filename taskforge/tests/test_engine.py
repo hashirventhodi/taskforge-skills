@@ -27,6 +27,7 @@ _spec.loader.exec_module(tasks)
 # re-export.
 import sys  # noqa: E402
 store = sys.modules["engine.store"]
+audit = sys.modules["engine.audit"]  # internal helpers (_record_prompt)
 
 
 def spec_payload(scope="do it", criteria=None, adopted=False):
@@ -420,13 +421,11 @@ class TestReviewAudit(Base):
 
     def test_clean_audit(self):
         t = self._runnable()
-        prompt = ("Spec criteria: criterion alpha; criterion beta.\n"
-                  "Diff: +change\nTests: green")
         self.apply(t, {"artifacts": [
             {"kind": "implementation",
              "payload": impl_payload(summary="SECRET_REASONING_XYZ")}]},
             "run")
-        tasks.record_review_prompt(t["id"], 1, prompt)
+        tasks.build_review_prompt(t["id"], "+change", "green")
         t = self.reload(t)
         self.apply(t, {"artifacts": [
             {"kind": "review", "payload": review_payload()}]}, "run")
@@ -434,6 +433,9 @@ class TestReviewAudit(Base):
         self.assertTrue(report["clean"], report["findings"])
 
     def test_leak_and_missing_criterion_detected(self):
+        """The audit is defense in depth: even against a prompt the engine
+        renderer would never produce, it must catch a missing criterion and a
+        leaked implementation summary. Injected via the internal recorder."""
         t = self._runnable()
         self.apply(t, {"artifacts": [
             {"kind": "implementation",
@@ -441,7 +443,7 @@ class TestReviewAudit(Base):
             "run")
         bad_prompt = ("criterion alpha only. My approach: "
                       "SECRET_REASONING_XYZ")
-        tasks.record_review_prompt(t["id"], 1, bad_prompt)
+        audit._record_prompt(t["id"], 1, bad_prompt)
         t = self.reload(t)
         self.apply(t, {"artifacts": [
             {"kind": "review", "payload": review_payload()}]}, "run")
@@ -459,6 +461,77 @@ class TestReviewAudit(Base):
         report = tasks.audit_review(t["id"])
         self.assertFalse(report["clean"])
         self.assertIn("no recorded prompt", report["findings"][0])
+
+
+class TestBuildReviewPrompt(Base):
+    """The engine owns prompt assembly so serialization can never desync the
+    reviewer's prompt from the canonical text the audit checks."""
+
+    # Criteria that broke hand-assembly on SourceGrid: embedded double quotes
+    # (JSON -> \") and a non-ASCII em dash (ensure_ascii -> —).
+    QUOTE_CRIT = 'the record carries delivery.status == "failed"'
+    DASH_CRIT = "a send Meta rejected — non-retryable — is distinguishable"
+
+    def _spec_task(self, criteria):
+        t = self.make()
+        self.apply(t, {"artifacts": [
+            {"kind": "specification",
+             "payload": spec_payload(criteria=criteria)}]}, "refine")
+        return self.reload(t)
+
+    def test_built_prompt_renders_criteria_verbatim_and_audits_clean(self):
+        """The regression: criteria containing " and — audit clean, because
+        the engine renders them verbatim rather than JSON-escaped."""
+        t = self._spec_task([self.QUOTE_CRIT, self.DASH_CRIT])
+        self.apply(t, {"artifacts": [
+            {"kind": "implementation", "payload": impl_payload()}]}, "run")
+        res = tasks.build_review_prompt(t["id"], "diff:+x", "tests: green")
+
+        prompt = (tasks.store_dir()
+                  / res["file"]).read_text(encoding="utf-8")
+        self.assertIn(self.QUOTE_CRIT, prompt)   # verbatim, not \"failed\"
+        self.assertIn(self.DASH_CRIT, prompt)    # verbatim, not —
+        self.assertIn('delivery.status == "failed"', prompt)
+        self.assertNotIn('\\"failed\\"', prompt)
+
+        t = self.reload(t)
+        self.apply(t, {"artifacts": [
+            {"kind": "review", "payload": review_payload()}]}, "run")
+        report = tasks.audit_review(t["id"])
+        self.assertTrue(report["clean"], report["findings"])
+
+    def test_build_is_deterministic(self):
+        """Same (spec, diff, results) -> identical bytes -> identical digest."""
+        t = self._spec_task([self.QUOTE_CRIT])
+        a = tasks.build_review_prompt(t["id"], "diff:+x", "green", version=1)
+        b = tasks.build_review_prompt(t["id"], "diff:+x", "green", version=1)
+        self.assertEqual(a["sha256"], b["sha256"])
+
+    def test_version_defaults_to_next_review(self):
+        t = self._spec_task([self.QUOTE_CRIT])
+        res = tasks.build_review_prompt(t["id"], "d", "r")
+        self.assertEqual(res["version"], 1)
+
+    def test_diff_and_results_are_present_verbatim(self):
+        t = self._spec_task([self.QUOTE_CRIT])
+        res = tasks.build_review_prompt(
+            t["id"], "DIFF_MARKER_123", "RESULTS_MARKER_456")
+        prompt = (tasks.store_dir()
+                  / res["file"]).read_text(encoding="utf-8")
+        self.assertIn("DIFF_MARKER_123", prompt)
+        self.assertIn("RESULTS_MARKER_456", prompt)
+
+    def test_requires_active_specification(self):
+        t = self.make()  # no spec artifact
+        with self.assertRaises(tasks.TaskforgeError):
+            tasks.build_review_prompt(t["id"], "d", "r")
+
+    def test_returns_recorded_contract(self):
+        """The verb returns the recorded prompt's identity: task, version,
+        audit-relative file path, and content digest."""
+        t = self._spec_task([self.QUOTE_CRIT])
+        res = tasks.build_review_prompt(t["id"], "d", "r")
+        self.assertEqual(set(res), {"task", "version", "file", "sha256"})
 
 
 class TestDoctor(Base):
