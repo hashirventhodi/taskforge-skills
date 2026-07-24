@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Human Console server — a thin local client of the taskforge engine.
 
-The Console is the human actor's seat, as the CLI + skills are the AI's: two
-peer clients of one engine. This server adds NO behavior of its own
-(docs/console/design-principles.md):
+The Console hosts the projection-driven Web UI, one of several presentation
+adapters over the Projection API (docs/ARCHITECTURE.md). This server adds NO
+behavior of its own (docs/console/design-principles.md):
 
-  * every operation — reads included — is a real engine CLI invocation
-    (`tasks.main(argv)` in-process, same store lock, same validation, same
-    refusals), so the engine remains the sole writer and sole deriver;
+  * reads are Projection API calls (`projections.*`, docs/PROJECTION_API.md) —
+    pure, read-only compositions of engine facts, served as JSON at `/api/p/…`;
+  * writes are real engine CLI invocations (`tasks.main(argv)` in-process, same
+    store lock, validation, and refusals), so the engine stays the sole writer;
   * write commands are whitelisted to the human's surface (`human-update`,
     `cancel`, `reopen`, `create`); anything else is refused here before the
     engine ever sees it;
@@ -155,17 +156,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        # Reads are Projection API calls (docs/PROJECTION_API.md); the raw
+        # snapshot/show endpoints of the old snapshot Console were removed.
         if path.startswith("/api/p/"):
             return self.serve_projection(path[len("/api/p/"):])
-        if path == "/api/snapshot":
-            return self.send_json(*run_cli(["snapshot"]))
-        if path.startswith("/api/task/"):
-            tid = path[len("/api/task/"):]
-            status, task = run_cli(["show", tid])
-            if status != 200:
-                return self.send_json(status, task)
-            _, budget = run_cli(["budget", tid])
-            return self.send_json(200, {"task": task, "budget": budget})
         # Static: / -> index.html; anything else must resolve inside STATIC.
         name = "index.html" if path == "/" else path.lstrip("/")
         f = (STATIC / name).resolve()

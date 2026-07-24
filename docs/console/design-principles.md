@@ -1,14 +1,14 @@
 # Human Console — design principles
 
-The Console is the human actor's native seat, as the CLI + skills are the
-AI's: two peer clients of one deterministic engine. These rules govern every
-screen; each exists because a specific failure mode was identified before a
-pixel was drawn. Screen designs cite them; changes to them belong here, once.
+The Console hosts the projection-driven Web UI — one presentation adapter over
+the Projection API (docs/ARCHITECTURE.md is the canonical layering doc). These
+rules govern the *server* and any client it hosts; each exists because a
+specific failure mode was identified before a pixel was drawn.
 
-1. **Reads come from `snapshot` (+ `show <id>` on demand).** Never from raw
-   store files. The snapshot's provenance rule (DESIGN §10.15) is the bar for
-   wanting more data: if the field you're missing isn't stored state, derived
-   state, or snapshot metadata, you're about to put logic in the client.
+1. **Reads come from the Projection API** (`docs/PROJECTION_API.md`), which is
+   itself a pure, read-only composition of engine facts — never from raw store
+   files. If a field you want isn't in a projection, the fix is an *additive*
+   projection change, not client logic: two derivations drift; there is one.
 
 2. **Every write is an existing engine command.** A button is a command with
    a nicer surface; the engine may refuse, and the refusal is shown verbatim.

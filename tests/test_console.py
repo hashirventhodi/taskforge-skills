@@ -76,26 +76,23 @@ class ConsoleBase(unittest.TestCase):
 
 
 class TestReads(ConsoleBase):
-    def test_snapshot_is_the_engine_snapshot(self):
+    def test_projection_endpoint_serves_board(self):
+        # Reads go through the Projection API, not the removed raw snapshot.
         self.parked_question()
-        status, snap = self.http("/api/snapshot")
+        status, board = self.http("/api/p/board")
         self.assertEqual(status, 200)
-        for key in ("snapshot_version", "tasks", "edges", "skipped"):
-            self.assertIn(key, snap)
-        self.assertEqual(len(snap["tasks"]), 1)
-        self.assertEqual(snap["tasks"][0]["human_blocked"]["actor"], "refine")
+        for key in ("next", "ready", "waiting", "awaiting_human", "counts"):
+            self.assertIn(key, board)
+        self.assertEqual(len(board["awaiting_human"]), 1)
 
-    def test_task_detail_bundles_show_and_budget(self):
+    def test_projection_task_detail_and_unknown_error(self):
         tid = self.parked_question()
-        status, d = self.http(f"/api/task/{tid}")
+        status, t = self.http(f"/api/p/task/{tid}")
         self.assertEqual(status, 200)
-        self.assertEqual(d["task"]["id"], tid)
-        self.assertIn("history", d["task"])
-        self.assertIn("next_review_version", d["budget"])
-
-    def test_unknown_task_is_an_engine_error(self):
-        status, d = self.http("/api/task/TASK-doesnotexist1")
-        self.assertEqual(status, 422)
+        self.assertEqual(t["ref"]["id"], tid)
+        self.assertIn("audit", t)                 # domain-model field present
+        status, d = self.http("/api/p/task/TASK-doesnotexist1")
+        self.assertEqual(status, 404)
         self.assertIn("error", d)
 
     def test_static_index_served_and_traversal_blocked(self):

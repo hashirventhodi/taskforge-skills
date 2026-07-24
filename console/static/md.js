@@ -14,8 +14,7 @@
  * remaining vector — dangerous URLs in links — is closed by safeHref(), which
  * allowlists http/https/mailto and drops anything else (e.g. javascript:).
  *
- * Self-contained: defines its own escapeHtml so it does not depend on app.js
- * or load order.
+ * Self-contained: defines its own escapeHtml, no external dependencies.
  */
 "use strict";
 
