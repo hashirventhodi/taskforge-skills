@@ -542,7 +542,8 @@ class TestDoctor(Base):
         tasks.save(t)
         report = tasks.doctor()
         self.assertFalse(report["clean"])
-        self.assertTrue(any("dangling" in f for f in report["findings"]))
+        self.assertTrue(any(f["kind"] == "dangling_edge"
+                            for f in report["findings"]))
 
 
 class TestLifecycles(Base):
@@ -1005,7 +1006,7 @@ class TestSchemaEvolution(Base):
         before = fp.read_bytes()
         result = tasks.doctor()
         self.assertFalse(result["clean"])
-        self.assertTrue(any("newer than this engine" in f
+        self.assertTrue(any(f["kind"] == "future_schema"
                             for f in result["findings"]))
         self.assertEqual(fp.read_bytes(), before)  # diagnostics never mutate
 

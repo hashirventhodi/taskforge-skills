@@ -101,7 +101,7 @@ class TestReads(ConsoleBase):
     def test_static_index_served_and_traversal_blocked(self):
         with urllib.request.urlopen(self.base + "/") as r:
             self.assertEqual(r.status, 200)
-            self.assertIn(b"Human Console", r.read())
+            self.assertIn(b"taskforge", r.read().lower())
         status, _ = self.http("/../../etc/hosts")
         self.assertEqual(status, 404)
 
@@ -172,8 +172,8 @@ class TestMarkdownWiring(ConsoleBase):
     def test_index_loads_md_before_app(self):
         html = (self.STATIC / "index.html").read_text()
         self.assertIn('src="/md.js"', html)
-        self.assertLess(html.index('src="/md.js"'), html.index('src="/app.js"'),
-                        "md.js must load before app.js (app.js calls renderMarkdown)")
+        self.assertLess(html.index('src="/md.js"'), html.index('src="/ui.js"'),
+                        "md.js must load before ui.js (ui.js calls renderMarkdown)")
 
     def test_md_defines_the_public_renderers(self):
         src = (self.STATIC / "md.js").read_text()

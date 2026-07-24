@@ -9,6 +9,28 @@ The Projection API is **the product**. HTTP, the terminal, and an SDK are
 *transports* over it, not the design. Implemented in `taskforge/scripts/
 projections.py`.
 
+## Domain concepts — one field, one meaning
+
+The contract is built on four domain concepts derived from the engine's facts.
+They are kept strictly separate, because real usage showed that overloading
+them ("audited", "integrity") produced contradictory fields across screens.
+
+| Concept | Question | Source | Values |
+|---|---|---|---|
+| **Structural Integrity** *(store)* | is the task graph well-formed? | `doctor`'s structural findings | sound / issues (dangling edge, cycle, unresolved ref, unreadable/future) |
+| **Review Result** *(task)* | did the *work* meet its spec? | review artifacts | verdict `approved`/`rejected`, attempts, per-criterion pass/fail |
+| **Audit Status** *(review)* | can the *review* be trusted as isolated? | `audit_review` + recorded prompt | `verified` / `breach` / `unrecorded` / `none` |
+| **Delivery Status** *(task/feature)* | where is the work in shipping? | delivery + `landing_status` | unlinked / in-flight / landed |
+
+Two orthogonalities the contract enforces:
+
+- **Review Result ⊥ Audit Status.** A review can be `approved` yet a `breach`
+  (the code passed, but the review wasn't isolated), or `rejected` yet
+  `verified`. They are separate fields, never one boolean.
+- **Structural Integrity ⊥ Audit hygiene.** A missing reviewer prompt is not a
+  graph defect. `doctor` now tags each finding with a `kind`; only *structural*
+  kinds count toward integrity, and `unaudited_review` feeds Audit Status.
+
 ## Guarantees
 
 - **Framework-agnostic.** Returns plain JSON-serializable data only —
@@ -54,10 +76,9 @@ consume it. `PROJECTION_API_VERSION = 1`.
   transport surfaces it out-of-band (an HTTP header, an SDK property) rather
   than bloating every payload. Projections themselves carry no version field.
 
-Diagnostic-display-only surfaces (`health.findings` strings) are explicitly
-*not* a programmatic contract — do not parse them; the structured lists
-(`done_unlanded`, `unaudited_reviews`) are the actionable surface, and a future
-structured `findings` shape would be added alongside, additively.
+`health.structural.issues[].message` is diagnostic-display text — do not parse
+it; switch on `.kind` instead. The structured facts (`structural.sound`,
+`audit.needs_attention`, `delivery.done_unlanded`) are the programmatic surface.
 
 ## Architecture
 
@@ -107,7 +128,8 @@ Task = {
   ref: Ref, description, readiness, terminal,
   feature: Ref | null,
   spec: { version, scope, criteria: Criterion[], constraints: str[], edge_cases: str[] } | null,
-  review: { latest_verdict: "approved"|"rejected"|null, attempts: int, audited: bool } | null,
+  review: { verdict: "approved"|"rejected"|null, attempts: int } | null,   // Review Result
+  audit: { status: "verified"|"breach"|"unrecorded"|"none" },              // Audit Status
   delivery: Resolved,
   blockers: Card[],        // open blocked_by
   blocks: Card[],          // what waits on this
@@ -128,7 +150,7 @@ Feature = {
   children: (Card & { review_state: "none"|"approved"|"rejected", depth: int })[],  // depth-ordered tree
   progress: { closed: int, total: int },                 // closed = done|cancelled
   landing: { landable: bool, blockers: Card[] },         // ← ENGINE landing_status, never re-derived
-  audit: { reviews_total: int, reviews_unaudited: int }, // unaudited = prompt never recorded
+  audit: { status, verified: int, breach: int, unrecorded: int },  // Audit Status rolled up over the subtree
   follow_ups: Card[]
 }
 ```
@@ -139,20 +161,19 @@ The review domain for one task.
 Review = {
   ref: Ref,
   criteria: Criterion[],                                 // active spec × latest criteria_results
-  attempts: { version: int, verdict, root_cause: str|null, findings: str[] }[],  // every version, in order
-  audit: { isolated: bool, findings: str[], reviews_checked: int[] },  // from audit-review, verbatim
+  attempts: { version: int, verdict, root_cause: str|null, findings: str[] }[],  // Review Result, every version
+  audit: { status, findings: str[], reviews_checked: int[] },   // Audit Status enum + audit-review findings
   budget: { retries_used: int, retries_max: int }        // retries_used = count of rejected attempts
 }
 ```
 
 ### `health()` → Health
-Store soundness.
+Store soundness across the three separate domain concerns — never conflated.
 ```ts
 Health = {
-  integrity_ok: bool,
-  findings: str[],                                       // doctor findings, verbatim (diagnostic text)
-  done_unlanded: Card[],                                 // units done but not landed (reviewed, not merged); inherited children excluded
-  unaudited_reviews: (Ref & { version: int })[]          // reviews whose prompt was never recorded
+  structural: { sound: bool, issues: { kind, task: str|null, message: str }[] },  // Structural Integrity only
+  audit: { verified: int, breach: int, unrecorded: int, needs_attention: { task: Ref, status }[] },  // Audit Status, store-wide
+  delivery: { done_unlanded: Card[] }                    // reviewed but not merged (inherited children excluded)
 }
 ```
 
@@ -195,13 +216,16 @@ no assumption of a single viewer; a client labels it "Needs you" if it wishes.
   by *both* the `link --landed` gate and `feature()`/`Card.landable`. One
   source of the landing rule — the presentation layer surfaces it, never
   re-implements it.
-- **`review.audit`** is `{isolated, findings, reviews_checked}` (verbatim from
-  `audit-review`) rather than three parsed booleans — parsing engine finding
-  *wording* would couple the contract to a non-stable string surface.
+- **Audit Status** (`verified`/`breach`/`unrecorded`/`none`) is computed from
+  the engine's audit verdict (`audit_review().clean`) + prompt evidence, and is
+  surfaced identically on `task`, `review`, and (rolled up) `feature`/`health`.
+  This replaced the old `review.audited` boolean, which meant two different
+  things across projections — the inconsistency that motivated this remap.
+- **`doctor` findings gained a `kind`** so Structural Integrity can exclude
+  `unaudited_review` (audit hygiene, not a graph defect). The `landing_status`
+  pattern: the engine owns the check, the projection composes structured facts.
 - **`review.budget.retries_used`** counts rejected attempts, not the engine's
   live per-cycle breaker counter (which resets to 0 once a task is approved).
-- **`health.findings`** passes `doctor`'s finding strings through verbatim;
-  structured findings would be a future additive engine improvement.
 - **`Digest` needs no engine read** — the raw store carries `history`; only the
   `snapshot` *command* strips it. Confirmed the earlier "history read" concern
   does not apply to the projection layer.

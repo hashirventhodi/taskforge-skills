@@ -178,7 +178,9 @@ class TestFeature(Base):
         self.assertEqual(ids[a]["depth"], 0)
         self.assertFalse(f["landing"]["landable"])
         self.assertEqual([blk["id"] for blk in f["landing"]["blockers"]], [b])
-        self.assertEqual(f["audit"]["reviews_unaudited"], 0)  # prompt recorded
+        self.assertEqual(f["audit"]["status"], "verified")  # child A audited
+        self.assertEqual(f["audit"]["breach"], 0)
+        self.assertEqual(f["audit"]["unrecorded"], 0)
 
     def test_landable_when_all_children_closed(self):
         feat, a, b = self._feature_with_children()
@@ -229,7 +231,7 @@ class TestReview(Base):
         by_text = {c["text"]: c["result"] for c in r["criteria"]}
         self.assertEqual(by_text["fields mapped"], "pass")
         self.assertEqual(by_text["currency ISO-4217"], "unchecked")
-        self.assertTrue(r["audit"]["isolated"])           # prompts recorded
+        self.assertEqual(r["audit"]["status"], "verified")  # prompts recorded, isolated
         self.assertEqual(r["budget"]["retries_used"], 1)  # one rejection
 
 
@@ -246,11 +248,13 @@ class TestHealth(Base):
         tasks.link(tasks.load(feat), branch="feature/sap", pr="#1", landed=True)
 
         h = proj.health()
-        unl = {c["id"] for c in h["done_unlanded"]}
+        unl = {c["id"] for c in h["delivery"]["done_unlanded"]}
         self.assertIn(solo, unl)              # standalone, unmerged
         self.assertNotIn(a, unl)              # inherits a LANDED feature
         self.assertNotIn(feat, unl)           # itself landed
-        self.assertTrue(h["integrity_ok"])
+        # An unaudited review must NOT drag structural integrity down — that is
+        # the domain separation this remap exists to enforce.
+        self.assertTrue(h["structural"]["sound"])
 
     def test_unaudited_review_is_flagged(self):
         t = self.create("x")
@@ -261,7 +265,56 @@ class TestHealth(Base):
              "test_results": {"passed": 1, "failed": 0, "summary": "g"}}},
             {"kind": "review", "payload": {"verdict": "approved", "findings": []}}])
         h = proj.health()
-        self.assertTrue(any(u["id"] == t for u in h["unaudited_reviews"]))
+        # surfaces under Audit Status as 'unrecorded' — not as an integrity fault
+        self.assertTrue(any(n["task"]["id"] == t and n["status"] == "unrecorded"
+                            for n in h["audit"]["needs_attention"]))
+        self.assertTrue(h["structural"]["sound"])   # graph is fine
+        self.assertEqual(h["audit"]["unrecorded"], 1)
+
+
+class TestDomainSeparation(Base):
+    """The two orthogonalities the domain remap enforces (PROJECTION_API.md):
+    Review Result ⊥ Audit Status, and Structural Integrity ⊥ Audit hygiene."""
+
+    def leaky_done(self, tid, secret="SECRETSUMMARY42"):
+        # a recorded prompt whose diff contains the implementation summary ->
+        # a real isolation breach on an otherwise-approved review.
+        self.spec(tid)
+        tasks.build_review_prompt(tid, f"the diff mentions {secret}", "ok")
+        self.apply(tid, "run", signal="done", signal_reason="ok", artifacts=[
+            {"kind": "implementation", "payload": {"summary": secret,
+             "diff_ref": "b", "test_results": {"passed": 1, "failed": 0,
+             "summary": "g"}}},
+            {"kind": "review", "payload": {"verdict": "approved", "findings": []}}])
+
+    def test_approved_review_can_still_be_a_breach(self):
+        t = self.create("leaky")
+        self.leaky_done(t)
+        task = proj.task(t)
+        self.assertEqual(task["review"]["verdict"], "approved")   # work passed
+        self.assertEqual(task["audit"]["status"], "breach")       # review untrusted
+        # bug #1 fixed: the SAME status everywhere, no contradiction
+        self.assertEqual(proj.review(t)["audit"]["status"], "breach")
+
+    def test_audit_status_consistent_task_and_feature(self):
+        feat = self.create("F")
+        a, = self.children(feat, ["child"])
+        self.leaky_done(a)
+        self.assertEqual(proj.task(a)["audit"]["status"], "breach")
+        f = proj.feature(feat)
+        self.assertEqual(f["audit"]["status"], "breach")          # rolled up
+        self.assertEqual(f["audit"]["breach"], 1)
+
+    def test_unaudited_review_does_not_break_structural_integrity(self):
+        t = self.create("x")
+        self.spec(t)
+        self.apply(t, "run", signal="done", signal_reason="ok", artifacts=[
+            {"kind": "implementation", "payload": {"summary": "i", "diff_ref":
+             "b", "test_results": {"passed": 1, "failed": 0, "summary": "g"}}},
+            {"kind": "review", "payload": {"verdict": "approved", "findings": []}}])
+        h = proj.health()
+        self.assertTrue(h["structural"]["sound"])                 # graph fine
+        self.assertEqual(h["audit"]["unrecorded"], 1)             # audit-only
 
 
 class TestDigest(Base):

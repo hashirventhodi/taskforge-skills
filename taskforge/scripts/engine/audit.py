@@ -187,25 +187,37 @@ def _artifact_at_or_before(task, kind, timestamp):
     return max(candidates, key=lambda a: a["version"]) if candidates else None
 
 
+# Doctor finding kinds. All but the last are *structural* (the task graph is
+# malformed); `unaudited_review` is *process hygiene* (a review's isolation was
+# never captured) — a different domain concept (Audit Status), separated so the
+# presentation layer never conflates the two. See docs/PROJECTION_API.md.
+STRUCTURAL_KINDS = ("unreadable", "future_schema", "dangling_edge",
+                    "unresolved_ref", "dependency_cycle")
+
+
 def doctor():
     findings = []
     ids = set()
     tasks_list = []
     future = []
+
+    def add(kind, task, message):
+        findings.append({"kind": kind, "task": task, "message": message})
+
     for p in sorted(store.store_dir().glob("TASK-*.json")):
         try:
             t = json.loads(p.read_text(encoding="utf-8"))
             tasks_list.append(t)
             ids.add(t["id"])  # a future-schema task still exists (not dangling)
         except (json.JSONDecodeError, KeyError) as exc:
-            findings.append(f"{p.name}: unreadable ({exc})")
+            add("unreadable", p.stem, f"{p.name}: unreadable ({exc})")
     # Future-schema tasks are reported but NOT structurally validated — this
     # engine can't interpret data from a newer version (DESIGN §10.12). doctor
     # is the ONE path that sees them (operational scans skip them).
     for t in tasks_list:
         if store.is_future(t):
             future.append(t)
-            findings.append(
+            add("future_schema", t["id"],
                 f"{t['id']}: schema_version {t['schema_version']} is newer "
                 f"than this engine ({SCHEMA_VERSION}) — run a newer taskforge "
                 f"to operate on it; skipped by operational scans")
@@ -214,7 +226,7 @@ def doctor():
             continue  # can't validate structure this engine doesn't understand
         for e in t["edges"]:
             if e["target"] not in ids:
-                findings.append(
+                add("dangling_edge", t["id"],
                     f"{t['id']}: dangling {e['type']} edge -> {e['target']}")
         ref = t.get("decision_ref")
         if ref:
@@ -224,20 +236,20 @@ def doctor():
                          parent["artifacts"].get("decision", [])]
                         if parent else [])
             if not parent or ref["version"] not in versions:
-                findings.append(
+                add("unresolved_ref", t["id"],
                     f"{t['id']}: decision_ref -> {ref['task_id']} "
                     f"v{ref['version']} does not resolve")
         if t["status"] not in TERMINAL:
             ev = evaluate(t)
             if ev["readiness"] == "human":
-                findings.append(
+                add("dependency_cycle", t["id"],
                     f"{t['id']}: dependency cycle "
                     f"{ev.get('cycle')} (will park on next step)")
         for review in t["artifacts"].get("review", []):
             fname = (store.audit_dir()
                      / f"{t['id']}-review-v{review['version']}.prompt.md")
             if not fname.exists():
-                findings.append(
+                add("unaudited_review", t["id"],
                     f"{t['id']}: review v{review['version']} has no "
                     f"recorded reviewer prompt (audit-review will flag)")
     return {"tasks": len(tasks_list), "findings": findings,

@@ -130,13 +130,45 @@ def _reviews_sorted(t):
     return sorted(t["artifacts"].get("review", []), key=lambda a: a["version"])
 
 
-def _review_summary(t):
+def _review_result(t):
+    """Review Result — did the *work* pass its spec? (latest verdict + attempt
+    count). A distinct domain concept from Audit Status: a review can be
+    approved yet a `breach`, or rejected yet `verified`."""
     revs = _reviews_sorted(t)
     if not revs:
         return None
-    return {"latest_verdict": revs[-1]["payload"].get("verdict"),
-            "attempts": len(revs),
-            "audited": audit.audit_review(t["id"])["clean"]}
+    return {"verdict": revs[-1]["payload"].get("verdict"),
+            "attempts": len(revs)}
+
+
+def _audit_status(t):
+    """Audit Status — can the *review* be trusted as isolated? (see
+    docs/PROJECTION_API.md). One of:
+      verified   — reviews recorded and the isolation audit passes;
+      breach     — a recorded prompt failed the audit (missing criterion or a
+                   leaked implementation summary — isolation violated);
+      unrecorded — a review has no recorded prompt, so isolation is unverifiable;
+      none       — no reviews yet.
+    Missing-prompt dominates a breach (recording the prompt is the first fix).
+    Computed from the engine's audit verdict + prompt evidence; never a rule the
+    layer re-derives."""
+    if not t["artifacts"].get("review"):
+        return "none"
+    if _unaudited_versions(t):
+        return "unrecorded"
+    return "verified" if audit.audit_review(t["id"])["clean"] else "breach"
+
+
+def _audit_rollup(subtree):
+    """Aggregate Audit Status across a set of tasks: worst-case status + the
+    per-status task counts. Severity: breach > unrecorded > verified > none."""
+    counts = {"verified": 0, "breach": 0, "unrecorded": 0, "none": 0}
+    for t in subtree:
+        counts[_audit_status(t)] += 1
+    status = next((s for s in ("breach", "unrecorded", "verified")
+                   if counts[s]), "none")
+    return {"status": status, "verified": counts["verified"],
+            "breach": counts["breach"], "unrecorded": counts["unrecorded"]}
 
 
 def _review_state(t):
@@ -191,7 +223,8 @@ def task(task_id):
             "terminal": _terminal(t),
             "feature": _feature_ref(t),
             "spec": _spec(t),
-            "review": _review_summary(t),
+            "review": _review_result(t),          # Review Result — did work pass?
+            "audit": {"status": _audit_status(t)},  # Audit Status — trust the review?
             "delivery": resolve_delivery(t),
             "blockers": [_card(by_id[b], children)
                          for b in blocker_ids(t) if b in by_id],
@@ -209,24 +242,19 @@ def feature(task_id):
         by_id, children = _world()
         t = by_id.get(task_id) or store.load(task_id)
 
-        rows, reviews_total, reviews_unaudited = [], 0, 0
+        rows = []
 
         def walk(pid, depth):
-            nonlocal reviews_total, reviews_unaudited
             for cid in sorted(children.get(pid, [])):
                 c = by_id[cid]
                 row = _card(c, children)
-                row["review_state"] = _review_state(c)
+                row["review_state"] = _review_state(c)  # Review Result of child
                 row["depth"] = depth
                 rows.append(row)
-                reviews_total += len(c["artifacts"].get("review", []))
-                reviews_unaudited += len(_unaudited_versions(c))
                 walk(cid, depth + 1)
 
         walk(t["id"], 0)
-        reviews_total += len(t["artifacts"].get("review", []))
-        reviews_unaudited += len(_unaudited_versions(t))
-
+        subtree = [t] + [by_id[r["id"]] for r in rows]
         ls = landing_status(t)
         closed = sum(1 for r in rows if by_id[r["id"]]["status"] in CLOSED)
         return {
@@ -239,8 +267,7 @@ def feature(task_id):
             "progress": {"closed": closed, "total": len(rows)},
             "landing": {"landable": ls["landable"],
                         "blockers": [_card(b, children) for b in ls["blockers"]]},
-            "audit": {"reviews_total": reviews_total,
-                      "reviews_unaudited": reviews_unaudited},
+            "audit": _audit_rollup(subtree),   # Audit Status across the subtree
             "follow_ups": [_card(by_id[i], children)
                            for i in _follow_up_ids(t["id"], by_id)],
         }
@@ -263,8 +290,8 @@ def review(task_id):
                           "root_cause": r["payload"].get("root_cause"),
                           "findings": r["payload"].get("findings", [])}
                          for r in _reviews_sorted(t)],
-            "audit": {"isolated": ar["clean"],
-                      "findings": ar["findings"],
+            "audit": {"status": _audit_status(t),   # Audit Status enum
+                      "findings": ar["findings"],    # isolation issues, if any
                       "reviews_checked": ar["reviews_checked"]},
             # How many rejections this task went through — a faithful count of
             # rejected attempts, not the engine's live per-cycle breaker
@@ -277,29 +304,40 @@ def review(task_id):
 
 
 def health():
-    """Store soundness — integrity, done-but-unlanded units (reviewed, not
-    merged), and reviews whose isolation was never recorded."""
+    """Store soundness across three *separate* domain concepts (never
+    conflated): Structural Integrity (is the graph well-formed?), Audit Status
+    (can the reviews be trusted?), and Delivery (reviewed work still unmerged)."""
     with store.store_lock():
         by_id, children = _world()
         doc = audit.doctor()
-        done_unlanded, unaudited = [], []
+        # Structural Integrity: doctor's structural findings ONLY — a missing
+        # reviewer prompt (kind 'unaudited_review') is audit hygiene, not a
+        # graph defect, and belongs to Audit Status below.
+        structural = [{"kind": f["kind"], "task": f.get("task"),
+                       "message": f["message"]}
+                      for f in doc["findings"]
+                      if f["kind"] in audit.STRUCTURAL_KINDS]
+        counts = {"verified": 0, "breach": 0, "unrecorded": 0}
+        needs, done_unlanded = [], []
         for t in by_id.values():
-            # A 'unit' that is done but not landed: reviewed work still
-            # unmerged. Children that inherit a feature are excluded — their
-            # landing is the feature's, reported once on the feature.
+            st = _audit_status(t)
+            if st in counts:
+                counts[st] += 1
+                if st != "verified":
+                    needs.append({"task": _ref(t), "status": st})
+            # A delivery *unit* (not an inheriting child) done but not landed:
+            # reviewed work still unmerged.
             if t["status"] == "done" and _feature_ref(t) is None:
                 r = resolve_delivery(t)
                 if r is None or r["landed_at"] is None:
                     done_unlanded.append(_card(t, children))
-            for v in _unaudited_versions(t):
-                unaudited.append({"id": t["id"], "title": t["title"],
-                                  "version": v})
         return {
-            "integrity_ok": doc["clean"],
-            "findings": list(doc["findings"]),   # diagnostic text, verbatim
-            "done_unlanded": sorted(done_unlanded, key=lambda c: c["id"]),
-            "unaudited_reviews": sorted(unaudited,
-                                        key=lambda u: (u["id"], u["version"])),
+            "structural": {"sound": not structural, "issues": structural},
+            "audit": {**counts,
+                      "needs_attention": sorted(needs,
+                                                key=lambda n: n["task"]["id"])},
+            "delivery": {"done_unlanded": sorted(done_unlanded,
+                                                 key=lambda c: c["id"])},
         }
 
 

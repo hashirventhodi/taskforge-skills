@@ -17,6 +17,17 @@ function statePill(card) {
   const v = card.terminal || card.readiness;
   return `<span class="pill p-${esc(v)}">${esc(v)}</span>`;
 }
+/* Audit Status is its own domain concept, distinct from the review verdict. */
+const AUDIT = {
+  verified: { cls: "p-approved", label: "isolated" },
+  breach: { cls: "p-rejected", label: "isolation breach" },
+  unrecorded: { cls: "p-refine", label: "unaudited" },
+  none: { cls: "p-waiting", label: "no review" },
+};
+function auditPill(status) {
+  const a = AUDIT[status] || AUDIT.none;
+  return `<span class="pill ${a.cls}">${a.label}</span>`;
+}
 function taskRow(card) {
   const route = card.is_feature ? "feature" : "task";
   const land = card.is_feature && card.landable != null
@@ -73,8 +84,9 @@ async function dashboard() {
       <div class="card"><h2 style="margin-top:0">Ready</h2>${readyHtml}</div>
       <div class="card"><h2 style="margin-top:0">In flight</h2>${inflight}
         <div class="kick" style="margin-top:14px">Health</div>
-        <div class="check"><span class="m ${h.integrity_ok ? "ok" : "no"}">${h.integrity_ok ? "✓" : "✕"}</span>integrity ${h.integrity_ok ? "intact" : "issues"}</div>
-        <div class="check"><span class="m pend">•</span>${h.unaudited_reviews.length} unaudited · ${h.done_unlanded.length} done, not landed
+        <div class="check"><span class="m ${h.structural.sound ? "ok" : "no"}">${h.structural.sound ? "✓" : "✕"}</span>structural integrity ${h.structural.sound ? "sound" : "issues"}</div>
+        <div class="check"><span class="m ${h.audit.breach ? "no" : h.audit.unrecorded ? "pend" : "ok"}">${h.audit.breach ? "✕" : h.audit.unrecorded ? "•" : "✓"}</span>reviews: ${h.audit.breach} breach · ${h.audit.unrecorded} unaudited</div>
+        <div class="check"><span class="m pend">•</span>${h.delivery.done_unlanded.length} done, not landed
           <a class="sub" href="#/health" style="margin-left:auto">details →</a></div>
       </div>
     </div>`;
@@ -96,9 +108,11 @@ async function taskFocus(id) {
     : `<div class="card"><div class="kick">Specification</div><div class="empty">No active spec — this task routes to ${esc(t.readiness)}.</div></div>`;
   const review = t.review
     ? `<div class="row link" onclick="go('review/${t.ref.id}')">
-        <span class="pill p-${t.review.latest_verdict || "open"}">${esc(t.review.latest_verdict || "in review")}</span>
-        <span class="ti">${t.review.attempts} attempt(s)</span>
-        <span class="sub">${t.review.audited ? "audited ✓" : "unaudited"}</span></div>`
+        <span class="pill p-${t.review.verdict || "open"}">${esc(t.review.verdict || "in review")}</span>
+        <span class="ti">${t.review.attempts} attempt(s) · did the work pass</span>
+        <span class="sub">view →</span></div>
+       <div class="row" style="border-top:0">${auditPill(t.audit.status)}
+        <span class="ti sub">can the review be trusted (isolation)</span></div>`
     : `<div class="empty">No review yet.</div>`;
   const list = (label, arr) => arr.length
     ? `<div class="kick" style="margin-top:10px">${label}</div>${arr.map(taskRow).join("")}` : "";
@@ -118,7 +132,7 @@ async function taskFocus(id) {
           ${list("Blocks", t.blocks)}${list("Follow-ups", t.follow_ups)}</div>
       </div>
     </div>
-    <div class="card"><div class="kick">Description</div><div class="desc">${esc(t.description)}</div></div>`;
+    <div class="card"><div class="kick">Description</div><div class="desc md">${window.renderMarkdown ? renderMarkdown(t.description) : esc(t.description)}</div></div>`;
 }
 
 /* ---- Feature ---- */
@@ -142,8 +156,8 @@ async function feature(id) {
       <div class="card"><div class="kick">Land readiness</div>
         <div class="check"><span class="m ${f.landing.landable ? "ok" : "no"}">${f.landing.landable ? "✓" : "✕"}</span>${f.landing.landable ? "ready to land" : "not landable"}</div>
         ${blockers}
-        <div class="kick" style="margin-top:12px">Audit</div>
-        <div class="check"><span class="m ${f.audit.reviews_unaudited ? "pend" : "ok"}">${f.audit.reviews_unaudited ? "•" : "✓"}</span>${f.audit.reviews_total} reviews · ${f.audit.reviews_unaudited} unaudited</div></div>
+        <div class="kick" style="margin-top:12px">Review audit</div>
+        <div class="check">${auditPill(f.audit.status)}<span class="ti sub">${f.audit.breach} breach · ${f.audit.unrecorded} unaudited · ${f.audit.verified} verified</span></div></div>
     </div>
     <div class="card"><div class="kick">Children · ${f.progress.closed}/${f.progress.total} closed</div>
       <div class="bar"><i style="width:${pct}%"></i></div><div style="margin-top:8px">${kids}</div></div>`;
@@ -163,7 +177,7 @@ async function review(id) {
     <div class="grid2">
       <div class="card"><div class="kick">Acceptance</div>${crit}</div>
       <div class="card"><div class="kick">Isolation audit</div>
-        <div class="check"><span class="m ${r.audit.isolated ? "ok" : "no"}">${r.audit.isolated ? "✓" : "✕"}</span>${r.audit.isolated ? "reviewer isolated, prompts recorded" : "isolation issues"}</div>
+        <div class="check">${auditPill(r.audit.status)}<span class="ti sub">${{ verified: "reviewer isolated, prompts recorded", breach: "isolation violated — see below", unrecorded: "reviewer prompt not recorded", none: "no reviews" }[r.audit.status]}</span></div>
         ${r.audit.findings.map((f) => `<div class="check"><span class="m no">✕</span>${esc(f)}</div>`).join("")}
         <div class="kv" style="margin-top:10px"><b>budget</b><span>${r.budget.retries_used} of ${r.budget.retries_max} retries used</span></div></div>
     </div>
@@ -195,13 +209,17 @@ async function activity() {
 async function health() {
   const h = await api("health");
   const cards = (label, arr, render) => `<div class="card"><div class="kick">${label} · ${arr.length}</div>${arr.length ? arr.map(render).join("") : `<div class="empty">None.</div>`}</div>`;
+  // Three separate domain concerns — never conflated (see PROJECTION_API.md).
+  const structural = h.structural.sound
+    ? `<div class="check"><span class="m ok">✓</span>graph sound — no dangling edges, cycles, or bad refs</div>`
+    : h.structural.issues.map((i) => `<div class="check"><span class="m no">✕</span>${esc(i.message)}</div>`).join("");
   view.innerHTML = `<h1>Health</h1>
-    <div class="card"><div class="kick">Integrity</div>
-      <div class="check"><span class="m ${h.integrity_ok ? "ok" : "no"}">${h.integrity_ok ? "✓" : "✕"}</span>${h.integrity_ok ? "no dangling edges, cycles, or bad refs" : "integrity issues below"}</div></div>
-    ${cards("Done but not landed", h.done_unlanded, taskRow)}
-    ${cards("Unaudited reviews", h.unaudited_reviews, (u) =>
-      `<div class="row link" onclick="go('review/${u.id}')"><span class="ti">${esc(u.title)}</span><span class="id">v${u.version} · ${esc(u.id)}</span></div>`)}
-    ${h.findings.length ? cards("Diagnostics", h.findings, (f) => `<div class="check"><span class="m pend">•</span>${esc(f)}</div>`) : ""}`;
+    <div class="card"><div class="kick">Structural integrity</div>${structural}</div>
+    <div class="card"><div class="kick">Review audit · ${h.audit.breach} breach · ${h.audit.unrecorded} unaudited · ${h.audit.verified} verified</div>
+      ${h.audit.needs_attention.length
+        ? h.audit.needs_attention.map((n) => `<div class="row link" onclick="go('review/${n.task.id}')">${auditPill(n.status)}<span class="ti">${esc(n.task.title)}</span><span class="id">${esc(n.task.id)}</span></div>`).join("")
+        : `<div class="check"><span class="m ok">✓</span>every review is isolated and recorded</div>`}</div>
+    ${cards("Delivery — done but not landed", h.delivery.done_unlanded, taskRow)}`;
 }
 
 /* ---- router ---- */
