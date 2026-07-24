@@ -208,7 +208,7 @@ async function activity(range) {
     ? Object.keys(labels).filter((k) => d.groups[k].length).map((k) =>
       `<div class="card"><div class="kick acc">${labels[k]}<span class="r">${d.groups[k].length}</span></div>${d.groups[k].map((i) =>
         `<div class="row link" onclick="go('task/${i.task.id}')" role="link" tabindex="0">
-          <span class="ti">${esc(i.task.title)}</span>${i.note ? `<span class="sub dim">${esc(i.note)}</span>` : ""}
+          <div class="rmain"><div class="rtitle">${esc(i.task.title)}</div>${i.note ? `<div class="rnote" title="${esc(i.note)}">${esc(i.note)}</div>` : ""}</div>
           <span class="id" title="${esc(i.at)}">${relTime(i.at)}</span><span class="go">→</span></div>`).join("")}</div>`).join("")
     : `<div class="empty">Nothing changed in this range. Try a wider one above.</div>`;
   setView(`<h1>Activity</h1><p class="lede">Meaningful changes, grouped by impact — not a raw log.</p>${tabs}${body}`);
