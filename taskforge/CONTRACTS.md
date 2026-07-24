@@ -70,6 +70,17 @@ prints the effective values — never guess a budget or limit.
 * `decision_ref` — pinned reference to a specific version of a parent's
   Decision. If present it is **binding input**: specify within it, never
   re-explore it, never escalate for a decision that already exists.
+* `delivery` — where the task's work goes: `{branch, pr, landed_at}`, set via
+  `link`. `source` is intake provenance; `delivery` is output provenance.
+  `landed_at` (a merged PR) is the fact that closes an external issue —
+  distinct from `done`, which means *reviewed*, not *merged*. **Delivery is
+  owned or inherited (DESIGN §10.19):** a task *owns* a delivery iff it was
+  `link`ed (any field set); a task that owns nothing **inherits** its nearest
+  owning ancestor's, resolved up the `parent` chain at read time — never
+  stored. So a decomposed feature owns one branch/PR/landing and its children
+  ride it; `link`ing a child breaks it out onto its own. Own delivery is
+  stored; `resolved_delivery` + `delivery_owner` are derived (read model only)
+  — the same split as `status` vs `readiness`.
 
 ## Terminal states and reopening
 
@@ -81,10 +92,24 @@ the human's answer), and reopen refuses it.
 
 Reopen loses nothing: artifacts, reviews, decisions, and the event history
 are all preserved (supersession only flags; history is append-only; the
-close reason lives in an immutable event). It lifts the terminal status and
-lets readiness **re-derive** the route from what the task already holds — it
-assigns no state of its own. Reopening a task that others are `blocked_by`
-re-blocks every still-active dependent; terminal dependents are untouched.
+close reason lives in an immutable event). Reopen preserves the **historical
+record** and lifts **operational completion**: it re-derives readiness from
+what the task already holds, and it clears both the terminal `status` and
+`delivery.landed_at` (a reopened feature is no longer delivered — see below).
+Reopening a task that others are `blocked_by` re-blocks every still-active
+dependent; terminal dependents are untouched.
+
+`done` is not `merged`. Landing is a separate axis from the workflow
+terminal: a `done` task records that its work was reviewed and accepted, not
+that its code shipped. The merge fact lives in `delivery.landed_at`, stamped
+by `link --landed`, and it is what gates external-issue closure
+(`references/sync.md`). Landing changes no status and no readiness — a landed
+task is still `done`, `terminal`. Two invariants (DESIGN §10.19): `--landed`
+requires the task be `done` **and every descendant closed** (`done`/
+`cancelled` — a child still in flight or parked means the merge is premature);
+and `reopen` clears `landed_at`, because landing is *operational* completion
+(like `status`), not an artifact — the provenance survives append-only in the
+event log (`landed → reopened → landed`).
 
 ## Edges
 

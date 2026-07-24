@@ -24,8 +24,19 @@ rejections.
 
 ## 2. Implement
 
-Plan briefly; work on an isolated line (branch `taskforge/<task-id>` in a
-git repo); run the tests.
+Plan briefly, then work on the right line (git repo):
+
+* **A standalone task** owns its delivery — branch `taskforge/<task-id>`,
+  recorded so provenance isn't prose: `$SCRIPT link <id> --branch
+  taskforge/<task-id>`.
+* **A child of a decomposed feature** runs on the **feature branch** and does
+  **not** link its own — delivery is inherited from the nearest owning
+  ancestor (DESIGN §10.19), so the whole feature ships as one branch/PR. Only
+  `link <id> --branch …` a child when it genuinely ships on its own line
+  (break-out). If the feature isn't linked yet, `link` the parent's branch
+  once.
+
+Run the tests.
 
 **Scope discipline is binding.** Adjacent problems you notice — flaky tests,
 dead code, missing validation elsewhere — become `follow_up` entries in your
@@ -76,11 +87,16 @@ record).
 
 ## 5. Emit, apply, sync, report
 
-Fresh `result_id`; `validate` then `apply` with `--actor run`. Terminal +
-external source → sync per `taskforge/references/sync.md` (with its
-honesty rule). Report per `reporting.md`: attempts, verdicts, root causes,
-follow_ups, final readiness. No merging/deploying beyond the spec's own
-criteria; no starting generated tasks.
+Fresh `result_id`; `validate` then `apply` with `--actor run`. If you opened
+a PR, record it on the delivery **owner** (the feature for a child, else this
+task): `$SCRIPT link <owner-id> --pr <ref>`. Terminal + external source → sync
+per `taskforge/references/sync.md` (with its honesty rule) — note that `done`
+**comments**, it does not close the issue. Report per `reporting.md`:
+attempts, verdicts, root causes, follow_ups, final readiness. No
+merging/deploying beyond the spec's own criteria; no starting generated
+tasks. **`done` is not merged**: the issue closes only when the code lands
+(`link <owner> --landed`, which the engine refuses until every descendant is
+closed), after the PR merges — often a later session, not here.
 
 ## Quality bar
 

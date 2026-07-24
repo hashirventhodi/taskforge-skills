@@ -47,6 +47,8 @@ the next skill; it never runs it.
 | `unblock <id>` | human answered | see Human unblocking |
 | `cancel <id>` | close without doing | `python3 $SCRIPT cancel TASK-x --reason "…"` (`--reason-file` when quoting the user), then sync per `references/sync.md` |
 | `reopen <id>` | restore a closed task | `python3 $SCRIPT reopen TASK-x --reason "…"`; see Reopening |
+| `land <id>` | record that a feature's PR merged | `python3 $SCRIPT link TASK-x --landed` (add `--pr <ref>` if not already linked). Refused unless the task is `done` **and every descendant is closed** (it lists any that aren't). Land the delivery **owner** (the feature), not each child. Then close the source issue per `references/sync.md` — landing, **not** `done`, closes it |
+| `link <id>` | record delivery provenance | `python3 $SCRIPT link TASK-x --branch <name> --pr <ref>`; where the code lives, as engine state not prose. A feature owns one delivery; its children **inherit** it (resolved up the parent chain), so `link` the feature — `link` a child only to break it onto its own branch |
 | `sync <id>` | tracker sync-back | `references/sync.md` |
 | `doctor` | store integrity | see Maintenance |
 | `audit <id>` | reviewer isolation | `python3 $SCRIPT audit-review TASK-x` |

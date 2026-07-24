@@ -35,7 +35,7 @@ change is a minor bump; from 1.0 on, a major bump):
 
 The subcommand **names** are stable: `create`, `show`, `list`, `readiness`,
 `blocked-by`, `budget`, `validate`, `apply`, `human-update`, `cancel`,
-`reopen`, `build-review-prompt`, `audit-review`, `config`, `doctor`,
+`reopen`, `link`, `build-review-prompt`, `audit-review`, `config`, `doctor`,
 `migrate`, `snapshot`. (Guarded both ways against the engine by the
 doc-contract suite.)
 
@@ -117,10 +117,12 @@ so that freedom is explicit.
 - **Diagnostic / informational output.** `readiness`'s `reason`,
   `blocking_ids`, and `cycle`; `budget`'s `max_review_retries`,
   `total_reviews`, `review_rejections_in_current_cycle`; the `config` key set;
-  and the convenience projection in create/show/cancel/reopen output
-  (`title`, `active_artifacts`, `pending_escalation`, `edges`, `source`).
-  These serve human-facing narration and may change in wording, shape, or
-  presence. For authoritative task data, read `show <id>`.
+  and the convenience projection in create/cancel/reopen/link output
+  (`title`, `active_artifacts`, `pending_escalation`, `edges`, `source`,
+  `delivery`, and the derived `delivery_owner`/`resolved_delivery`). These
+  serve human-facing narration and may change in wording, shape, or presence.
+  For authoritative task data, read `show <id>` (raw stored task — no derived
+  fields).
 - **Result-application internals.** `apply`'s `applied`, `duplicate_of`,
   `note`, and `warnings` keys communicate idempotency/validation detail, not
   a frozen contract.
@@ -128,7 +130,8 @@ so that freedom is explicit.
   row's `readiness_detail` (the same diagnostic detail `readiness <id>`
   returns — `readiness` itself stays the bare routing string everywhere) plus
   the convenience projection fields (`title`, `active_artifacts`,
-  `pending_escalation`, `decision_ref`, `source`, timestamps). Additions to
+  `pending_escalation`, `decision_ref`, `source`, `delivery`, the derived
+  `delivery_owner`/`resolved_delivery`, timestamps). Additions to
   the snapshot must satisfy the provenance rule (stored / derived-by-existing-
   logic / snapshot metadata — DESIGN §10.15); a field that fails it is
   presentation logic and belongs in a client.

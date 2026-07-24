@@ -7,7 +7,7 @@ and it imports nothing of theirs.
 import uuid
 from datetime import datetime, timezone
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 KINDS = ["decision", "specification", "implementation", "review"]  # cascade order
 SEMANTIC_EDGES = {"parent", "blocked_by", "generated_from"}
@@ -56,6 +56,12 @@ def new_task(title: str, description: str, source_type: str = "manual",
         "created_at": now(), "updated_at": now(),
         "source": {"type": source_type, "reference": source_ref,
                    "synced_at": None},
+        # Delivery provenance: where this task's work goes, and whether it
+        # landed. `source` is intake (where the task came from); `delivery`
+        # is output. `landed_at` (a merged PR) is what gates external-issue
+        # closure — decoupled from `done` (reviewed), which does not mean
+        # merged. See DESIGN §10.18 and references/sync.md.
+        "delivery": {"branch": None, "pr": None, "landed_at": None},
         "edges": [],
         "decision_ref": None,
         "pending_escalation": None,
@@ -93,6 +99,15 @@ def blocker_ids(task):
 def parent_id(task):
     return next((e["target"] for e in task["edges"] if e["type"] == "parent"),
                 None)
+
+
+def owns_delivery(task):
+    """A task *owns* a delivery iff it has been `link`ed — any of branch/pr/
+    landed_at set. The `new_task` all-None default is a non-owner, which
+    inherits its nearest owning ancestor's delivery (resolved, not stored;
+    DESIGN §10.19). Ownership is a derived predicate, never a stored flag."""
+    d = task.get("delivery") or {}
+    return any(d.get(k) is not None for k in ("branch", "pr", "landed_at"))
 
 
 def block_on_human(task, reason, detail, actor="tasks.py"):

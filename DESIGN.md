@@ -869,3 +869,102 @@ test page. The lesson is the §10.15 method applied to a renderer: **real
 prose, not synthetic samples, is the test corpus** — which is exactly why the
 renderer's security *and* correctness live in `console/static/md-test.html`
 (browser-verified) rather than in synthetic assertions alone.
+
+### v0.6.0 — §10.19 delivery is derived up the parent chain (supersedes §10.18)
+
+§10.18 gave every task its own `delivery: {branch, pr, landed_at}`. First
+multi-child use showed the flaw: a decomposed feature does **not** deliver
+per-child. On SourceGrid, gh-335 fanned into three children that all shipped in
+**one branch, one PR (#343), one merge** — the unit of delivery is the
+*feature*, not each child. Per-task ownership implied a branch and a PR per
+child: bad DX, and dishonest (three "landed" facts for one merge).
+
+**The fix keeps the stored shape and adds a derivation — the readiness pattern,
+applied to delivery.** Delivery is now *owned* by whichever task was `link`ed
+and *resolved* by everyone else:
+
+- **Ownership is a predicate, not a flag.** A task *owns* a delivery iff any of
+  `branch`/`pr`/`landed_at` is set (it was `link`ed). The `new_task` all-`None`
+  default is a non-owner. No new stored field, no `via` pointer, no
+  decomposition-time write.
+- **Resolution walks up the parent chain** to the nearest owning ancestor
+  (cycle-safe; nearest-wins, so nested epic→feature→subtask trees resolve to
+  the closest owner). `resolve_delivery` is derived, never stored — exactly as
+  `readiness` is derived from `status` and never assigned. The projections
+  expose `delivery` (own, stored) alongside `delivery_owner` and
+  `resolved_delivery` (derived), the same split as `status` vs
+  `readiness_detail`.
+- **Break-out is free, no detach verb.** `link <child> --branch …` makes the
+  child an owner; the walk halts at it; it becomes its own unit. The default
+  (own nothing → inherit the feature) matches the common reality of a shared
+  branch, and divergence is the explicit `link` — explicitness where it belongs.
+
+Why *not* a second relationship (`via`): it would reintroduce a stored
+cross-task reference the engine deliberately avoids, plus a synchronization
+burden (keep child pointers in step) and a decomposition-time write. Derivation
+over the *existing* parent edge has none of those — it is strictly less
+mechanism than §10.18 for strictly more capability. Rejected alternative
+`via` fails one falsifiable test: it stores what the parent edge already knows.
+
+Two invariants fall out, and both are enforced:
+
+- **Landing asserts the unit is complete.** `link <unit> --landed` refuses if
+  any *descendant* is not a closed terminal (`done`/`cancelled`) — a child
+  still in `run`/`refine`, or parked `blocked_on_human` (an open question), means
+  the decomposition was wrong or the merge premature. The refusal lists the
+  offenders deterministically, like the review-budget checks. (The gate is
+  `CLOSED`, not `TERMINAL`: a parked child blocks landing.)
+- **Reopen clears `landed_at`.** Landing is *operational* completion state,
+  like `status` — not an artifact. Reopen already lifts `status` (done→new); it
+  now lifts `landed_at` with it, because a reopened feature is no longer
+  delivered and "reopened + landed ✓" is a contradiction. Provenance is not
+  lost: it lives append-only in the event log (`landed → reopened → landed`),
+  and branch/PR are kept (still-true provenance, and keeping a field set holds
+  the unit's ownership stable so children keep resolving to it as *not* landed).
+  This sharpens the reopen invariant rather than breaking it: reopen preserves
+  the **historical record** (artifacts, reviews, events) and lifts **operational
+  completion** (`status`, `landed_at`).
+
+The consumer audit that preceded this change found the decisive property:
+**every engine mutation and idempotency read touches only the task's *own*
+delivery** (that is how a task becomes an owner), and nothing in the routing
+path (`readiness`, cascades, `doctor`) reads delivery at all. So resolution is a
+pure read-model concern — only the two projections and sync-back consume the
+resolver; the mutation layer never resolves. That is why the derived model adds
+no risk to the hot path.
+
+### v0.6.0 — §10.18 git-aware tasks: `done` is not `merged`
+
+> **The per-task delivery *ownership* introduced here is superseded by §10.19**,
+> which makes delivery **derived up the parent chain**. The `done` ≠ `merged`
+> insight, the `landed`-gates-closure rule, and the `link` verb all stand; what
+> §10.19 changes is *where* the branch/PR/landing live — on the feature, with
+> children inheriting — instead of one delivery per task.
+
+First production use (sourcegrid) exposed a model gap the design never
+questioned: the terminal status `done` was treated as *shipped*. The sync-back
+rule closed the source issue the moment a task went `done` — but `done` means
+*the work was reviewed and accepted*, which is a different fact from *the code
+merged*. On gh-335 the issue was closed while the PR was still unopened; it had
+to be reopened. The terminal state overclaimed reality, and nothing in the
+engine recorded where the code actually was.
+
+The fix keeps the concept count low: **landing is a separate axis, not a new
+lifecycle state.** A task carries `delivery: {branch, pr, landed_at}` — output
+provenance, parallel to `source` (intake provenance). `link` records it; only
+a `done` task may be marked `--landed`, because you land reviewed work. Landing
+changes no `status` and no `readiness` — a landed task is still `done`,
+`terminal` — so readiness, capabilities, reopen, and the state machine are
+entirely untouched. What changes is *what closes an external issue*:
+`references/sync.md` now keys closure on `landed_at`, and `done` merely
+comments. The engine holds the merge fact; the skill still owns the GitHub
+mechanism (the same client/engine split as everywhere else).
+
+Why not fold landing into the status enum (a `merged` terminal)? Because that
+ripples into every consumer of `status`/`readiness`/`TERMINAL` for a fact that
+is orthogonal to routing — a large diff to encode a small, separable truth.
+Delivery is metadata *about* a terminal task, and modelling it as a field, set
+by one verb and surfaced in the read model, is the whole of it. `synced_at`,
+the dead slot the original `source` shape reserved for "did this reach the
+tracker?", is the fossil that shows this was always intended and never built;
+E2 builds the honest version of it.

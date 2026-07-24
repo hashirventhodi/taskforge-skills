@@ -313,9 +313,74 @@ def reopen(task, reason, actor="human"):
         raise TaskforgeError(
             f"task is {status!r}, not a closed terminal (done/cancelled); "
             "there is nothing to reopen")
-    record(task, "reopened", actor, reason=reason)
+    # Landing is operational completion state, like `status` — not an artifact.
+    # Reopen already lifts `status` (done->new); it lifts `landed_at` with it,
+    # because a reopened feature is no longer delivered and "reopened + landed"
+    # is a contradiction (DESIGN §10.19). Provenance is not lost — the append-
+    # only event log keeps `landed`/`reopened`; branch/PR are kept (still-true
+    # provenance, and keeping a field set holds the unit's ownership stable).
+    landed_cleared = False
+    d = task.get("delivery")
+    if d and d.get("landed_at") is not None:
+        d["landed_at"] = None
+        landed_cleared = True
+    record(task, "reopened", actor, reason=reason,
+           detail={"landed_cleared": True} if landed_cleared else None)
     task["status"] = "new"
     refresh_status(task)
     store.save(task)
     refresh_dependents(task["id"])
+    return task
+
+
+def link(task, branch=None, pr=None, landed=False, actor="human"):
+    """Record delivery provenance — where the task's work lives (branch, PR)
+    and whether it has landed (a merged PR). This always writes the task's
+    *own* delivery; `link`ing is how a task becomes a delivery owner. Tasks
+    that own nothing inherit their nearest owning ancestor's delivery, resolved
+    at read time (engine.delivery; DESIGN §10.19) — never written here.
+
+    `--landed` is the fact that gates external-issue closure (references/
+    sync.md), decoupled from `done`: `done` means reviewed and accepted;
+    landing means merged. Landing a unit asserts the unit is *complete*, so it
+    requires both a `done` task and every descendant closed (done/cancelled) —
+    a child still in flight, or parked on an open question, means the
+    decomposition was wrong or the merge premature. Branch/PR carry no such
+    guard; they are set during the run, before the task is done.
+
+    Provenance is last-write-wins; landing is stamped once (idempotent — a
+    second `--landed` is a no-op, preserving the original `landed_at`)."""
+    if branch is None and pr is None and not landed:
+        raise TaskforgeError(
+            "link needs at least one of --branch, --pr, or --landed")
+    # A newer field on an un-migrated (v1) task: tolerate its absence.
+    task.setdefault("delivery",
+                    {"branch": None, "pr": None, "landed_at": None})
+    if branch is not None:
+        task["delivery"]["branch"] = branch
+        record(task, "linked", actor, detail={"branch": branch})
+    if pr is not None:
+        task["delivery"]["pr"] = pr
+        record(task, "linked", actor, detail={"pr": pr})
+    if landed:
+        if task["status"] != "done":
+            raise TaskforgeError(
+                f"cannot mark {task['id']} landed: status is "
+                f"{task['status']!r}, not 'done' — only reviewed-and-accepted "
+                "work can land")
+        from engine.delivery import descendants
+        open_desc = sorted(
+            (d for d in descendants(task["id"]) if d["status"] not in CLOSED),
+            key=lambda d: d["id"])
+        if open_desc:
+            listing = "\n".join(f"  - {d['id']} ({d['status']})"
+                                for d in open_desc)
+            raise TaskforgeError(
+                f"cannot mark {task['id']} as landed.\n\nThe following "
+                f"descendants are not closed (done/cancelled):\n\n{listing}")
+        if task["delivery"]["landed_at"] is None:
+            task["delivery"]["landed_at"] = now()
+            record(task, "landed", actor,
+                   detail={"pr": task["delivery"]["pr"]})
+    store.save(task)
     return task

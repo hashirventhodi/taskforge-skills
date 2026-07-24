@@ -6,6 +6,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — git-aware tasks: `done` is not `merged` (v0.6.0)
+- **`link <id> [--branch B] [--pr P] [--landed]`** — records a task's delivery
+  provenance: where its work lives (branch, PR) and whether it landed (a merged
+  PR). `source` is intake provenance; `delivery: {branch, pr, landed_at}` is
+  output provenance.
+- **Closes the `done` ≠ `merged` gap found running TaskForge on SourceGrid.**
+  The old sync-back rule closed the source issue on task-`done` — but `done`
+  means *reviewed and accepted*, not *merged*. On gh-335 the issue was closed
+  before the PR even opened, and had to be reopened. Now `references/sync.md`
+  keys external-issue closure on the merge fact, and `done` merely comments.
+  The engine holds the merge fact; the skill still owns the GitHub mechanism.
+- **Delivery is owned or inherited (DESIGN §10.19, supersedes §10.18).** A task
+  *owns* a delivery iff it was `link`ed (any field set); a task that owns
+  nothing **inherits** its nearest owning ancestor's, resolved up the `parent`
+  chain at read time — never stored, no `via` pointer, no decomposition-time
+  write. So a decomposed feature owns one branch/PR/landing and its children
+  ride it (`link` a child only to break out). `resolve_delivery` is derived,
+  exactly as `readiness` is — the projections add `delivery_owner` and
+  `resolved_delivery` (informational) beside the stored own `delivery`.
+- **Landing asserts completeness and is a separate axis, not a status.**
+  `--landed` requires the task be `done` **and every descendant closed**
+  (`done`/`cancelled`; it lists any that aren't), and is idempotent. A landed
+  task is still `done`/`terminal` — readiness, capabilities, and the state
+  machine are untouched.
+- **Reopen clears `landed_at`.** Landing is operational completion (like
+  `status`), not an artifact; a reopened feature is no longer delivered, so
+  reopen lifts it — provenance stays append-only in the event log
+  (`landed → reopened → landed`); branch/PR are kept.
+- **Schema v1 → v2.** `migrate` back-fills `delivery` on existing tasks (the
+  first real migration; the placeholder v1 path was a no-op). An engine still
+  reads and migrates older stores and never mutates newer ones (unchanged
+  directional-compatibility invariant).
+
 ### Added — engine-owned reviewer-prompt assembly (v0.6.0)
 - **`build-review-prompt <id> --diff <file> --results <file> [--version N]`** —
   the engine now assembles and records the reviewer prompt from the active

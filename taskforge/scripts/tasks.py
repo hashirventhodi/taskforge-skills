@@ -32,8 +32,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine.model import (                                    # noqa: E402,F401
     CLOSED, FORBIDDEN_EDGES, KINDS, RELATIONS, RESULT_KEYS, SCHEMA_VERSION,
     SEMANTIC_EDGES, SIGNALS, STATUS_FOR, TERMINAL, TaskforgeError, active,
-    block_on_human, blocker_ids, has_edge, new_task, now, parent_id,
-    record, review_rejections_in_current_cycle, supersede)
+    block_on_human, blocker_ids, has_edge, new_task, now, owns_delivery,
+    parent_id, record, review_rejections_in_current_cycle, supersede)
+from engine.delivery import descendants, resolve_delivery  # noqa: E402,F401
 from engine.store import (                                    # noqa: E402,F401
     all_tasks, audit_dir, capabilities, config, ensure_config_file, find,
     load, path_of, save, store_dir, store_lock)
@@ -42,7 +43,7 @@ from engine.validation import (                               # noqa: E402,F401
     validate_edge_type, validate_payload, validate_result)
 from engine.apply import (                                    # noqa: E402,F401
     add_artifact, add_edge, apply_result, apply_signal, cascade,
-    flag_stale_decision_refs, materialize, refresh_dependents, reopen)
+    flag_stale_decision_refs, link, materialize, refresh_dependents, reopen)
 from engine.audit import (                                    # noqa: E402,F401
     audit_review, build_review_prompt, doctor, migrate)
 from engine.cli import build_parser, main, run_command, summary  # noqa: E402,F401

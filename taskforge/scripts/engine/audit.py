@@ -248,7 +248,10 @@ def migrate():
     changed = []
     for t in store.all_tasks():
         if t.get("schema_version", 1) < SCHEMA_VERSION:
-            t["schema_version"] = SCHEMA_VERSION  # v1: nothing else to do
+            # v1 -> v2: git-aware tasks gained a `delivery` block.
+            t.setdefault("delivery",
+                         {"branch": None, "pr": None, "landed_at": None})
+            t["schema_version"] = SCHEMA_VERSION
             store.save(t)
             changed.append(t["id"])
     return {"schema_version": SCHEMA_VERSION, "migrated": changed}

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from engine import apply as apply_mod
 from engine import audit, readiness, store
+from engine.delivery import resolve_delivery
 from engine.model import (KINDS, TaskforgeError, active, has_edge, new_task,
                           record, review_rejections_in_current_cycle)
 
@@ -15,6 +16,7 @@ def summary(task):
     # `readiness` is always the routing string (its one meaning across the
     # whole CLI). The diagnostic detail (reason/blocking_ids/cycle) lives on
     # the dedicated `readiness` command, not here.
+    resolved = resolve_delivery(task)
     return {"id": task["id"], "title": task["title"],
             "status": task["status"],
             "readiness": readiness.evaluate(task)["readiness"],
@@ -24,7 +26,15 @@ def summary(task):
             "active_artifacts": {
                 k: (a["version"] if (a := active(task, k)) else None)
                 for k in KINDS},
-            "source": task["source"]}
+            "source": task["source"],
+            # `delivery` is the task's own (stored); `delivery_owner` and
+            # `resolved_delivery` are derived up the parent chain — the same
+            # stored-vs-derived split as status vs readiness (DESIGN §10.19).
+            "delivery": task.get("delivery"),
+            "delivery_owner": resolved["owner"] if resolved else None,
+            "resolved_delivery": (
+                {k: resolved[k] for k in ("branch", "pr", "landed_at")}
+                if resolved else None)}
 
 
 def out(obj):
@@ -121,6 +131,12 @@ def build_parser():
     b.add_argument("--diff", required=True)
     b.add_argument("--results", required=True)
     b.add_argument("--version", type=int)
+
+    lk = sub.add_parser("link")
+    lk.add_argument("id")
+    lk.add_argument("--branch")
+    lk.add_argument("--pr")
+    lk.add_argument("--landed", action="store_true")
 
     sub.add_parser("config")
     sub.add_parser("doctor")
@@ -242,6 +258,12 @@ def run_command(args):
         with store.store_lock():
             out(audit.build_review_prompt(
                 args.id, diff, results, args.version))
+
+    elif args.cmd == "link":
+        with store.store_lock():
+            t = apply_mod.link(store.load(args.id), args.branch, args.pr,
+                               args.landed, actor="human")
+        out(summary(t))
 
     elif args.cmd == "audit-review":
         out(audit.audit_review(args.id))

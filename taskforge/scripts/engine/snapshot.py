@@ -21,6 +21,7 @@ snapshot must not claim to be the world while missing part of it.
 import json
 
 from engine import readiness, store
+from engine.delivery import resolve_delivery
 from engine.model import KINDS, active, now
 
 SNAPSHOT_VERSION = 1
@@ -28,6 +29,7 @@ SNAPSHOT_VERSION = 1
 
 def _task_row(t: dict) -> dict:
     ev = readiness.evaluate(t)
+    dlv = resolve_delivery(t)  # one parent-chain walk per row
     row = {
         # stored, verbatim
         "id": t["id"],
@@ -36,12 +38,19 @@ def _task_row(t: dict) -> dict:
         "pending_escalation": t.get("pending_escalation"),
         "decision_ref": t.get("decision_ref"),
         "source": t["source"],
+        "delivery": t.get("delivery"),
         "created_at": t["created_at"],
         "updated_at": t["updated_at"],
         # derived, existing logic only
         "readiness": ev["readiness"],
         "readiness_detail": {k: v for k, v in ev.items()
                              if k != "readiness"},
+        # derived: delivery resolved up the parent chain (DESIGN §10.19), the
+        # same stored (`delivery`) vs derived split as status vs readiness.
+        "delivery_owner": dlv["owner"] if dlv else None,
+        "resolved_delivery": (
+            {k: dlv[k] for k in ("branch", "pr", "landed_at")}
+            if dlv else None),
         "active_artifacts": {
             k: (a["version"] if (a := active(t, k)) else None)
             for k in KINDS},

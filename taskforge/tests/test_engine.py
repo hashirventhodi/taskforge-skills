@@ -907,7 +907,7 @@ class TestSchemaEvolution(Base):
     load-bearing invariant is that a current engine never mutates the bytes
     of a future-schema task; every other behavior follows from it."""
 
-    def write_future_task(self, task_id="TASK-future0001", schema=2,
+    def write_future_task(self, task_id="TASK-future0001", schema=3,
                           edges=None, status="needs_refine"):
         t = {
             "schema_version": schema, "id": task_id,
@@ -920,7 +920,7 @@ class TestSchemaEvolution(Base):
             "edges": edges or [], "decision_ref": None,
             "pending_escalation": None, "applied_results": [],
             "artifacts": {k: [] for k in tasks.KINDS}, "history": [],
-            "unknown_v2_field": "the engine must not choke on or drop this",
+            "unknown_v3_field": "the engine must not choke on or drop this",
         }
         p = Path(self.dir) / f"{task_id}.json"
         p.write_text(json.dumps(t, indent=2, sort_keys=True))
@@ -1017,8 +1017,9 @@ class TestSchemaEvolution(Base):
         self.assertEqual(fp.read_bytes(), before)
 
     def test_is_future_predicate(self):
-        self.assertTrue(store.is_future({"schema_version": 2}))
-        self.assertFalse(store.is_future({"schema_version": 1}))
+        self.assertTrue(store.is_future({"schema_version": 3}))
+        self.assertFalse(store.is_future({"schema_version": 2}))  # current
+        self.assertFalse(store.is_future({"schema_version": 1}))  # migratable
         self.assertFalse(store.is_future({}))  # defaults to 1
 
 
@@ -1320,6 +1321,273 @@ class TestReopen(Base):
         self.assertNotIn(s["status"], tasks.TERMINAL)
         t = self.reload(t)
         self.assertEqual(t["history"][-1]["reason"], "re-prioritized `now`")
+
+
+class TestLink(Base):
+    """Git-aware tasks (E2): `link` records delivery provenance — branch/PR
+    and the land fact. Landing (a merged PR) is decoupled from `done`
+    (reviewed) and is what gates external-issue closure; it may only be
+    stamped on a `done` task."""
+
+    def done_task(self):
+        """A task carried to `done` through a real approved review."""
+        t = self.make()
+        self.apply(t, {"artifacts": [
+            {"kind": "specification", "payload": spec_payload()}]}, "refine")
+        t = self.reload(t)
+        self.apply(t, {"artifacts": [
+            {"kind": "implementation", "payload": impl_payload()},
+            {"kind": "review", "payload": review_payload("approved")}],
+            "signal": "done"}, "run")
+        return self.reload(t)
+
+    def test_new_task_has_empty_delivery(self):
+        t = self.make()
+        self.assertEqual(t["delivery"],
+                         {"branch": None, "pr": None, "landed_at": None})
+
+    def test_link_records_branch_and_pr(self):
+        t = self.make()
+        t = tasks.link(t, branch="taskforge/x", pr="humane-hq/repo#99")
+        self.assertEqual(t["delivery"]["branch"], "taskforge/x")
+        self.assertEqual(t["delivery"]["pr"], "humane-hq/repo#99")
+        self.assertIsNone(t["delivery"]["landed_at"])
+        types = [e["type"] for e in t["history"]]
+        self.assertEqual(types.count("linked"), 2)  # one per field set
+
+    def test_link_branch_before_done_is_allowed(self):
+        # Branch/PR are set during the run, before the task is done.
+        t = self.make()
+        t = tasks.link(t, branch="taskforge/x")
+        self.assertEqual(t["delivery"]["branch"], "taskforge/x")
+
+    def test_link_provenance_is_last_write_wins(self):
+        t = self.make()
+        tasks.link(t, branch="first")
+        t = tasks.link(self.reload(t), branch="second")
+        self.assertEqual(t["delivery"]["branch"], "second")
+
+    def test_landed_requires_done(self):
+        t = self.make()  # status: new, not done
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            tasks.link(t, landed=True)
+        self.assertIn("not 'done'", str(ctx.exception))
+        self.assertIsNone(t["delivery"]["landed_at"])
+
+    def test_landed_stamps_and_records_on_done_task(self):
+        t = self.done_task()
+        t = tasks.link(t, pr="repo#7", landed=True)
+        self.assertIsNotNone(t["delivery"]["landed_at"])
+        landed = [e for e in t["history"] if e["type"] == "landed"]
+        self.assertEqual(len(landed), 1)
+        self.assertEqual(landed[0]["detail"]["pr"], "repo#7")
+
+    def test_landing_is_idempotent(self):
+        t = tasks.link(self.done_task(), landed=True)
+        first = t["delivery"]["landed_at"]
+        t = tasks.link(self.reload(t), landed=True)
+        self.assertEqual(t["delivery"]["landed_at"], first)  # unchanged
+        self.assertEqual(
+            len([e for e in t["history"] if e["type"] == "landed"]), 1)
+
+    def test_landing_does_not_change_status_or_readiness(self):
+        # Landing is orthogonal metadata on a terminal task, not a new state.
+        t = self.done_task()
+        t = tasks.link(t, landed=True)
+        self.assertEqual(t["status"], "done")
+        self.assertEqual(tasks.evaluate(t)["readiness"], "terminal")
+
+    def test_link_requires_at_least_one_field(self):
+        t = self.make()
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            tasks.link(t)
+        self.assertIn("at least one", str(ctx.exception))
+
+    def test_link_via_cli_surfaces_delivery(self):
+        import io
+        import contextlib
+        t = self.make()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(["link", t["id"], "--branch", "taskforge/y"])
+        s = json.loads(buf.getvalue())
+        self.assertEqual(s["delivery"]["branch"], "taskforge/y")
+
+    def test_migrate_backfills_delivery_on_v1_task(self):
+        # A pre-E2 (v1) task on disk, lacking `delivery`, is migrated to v2.
+        t = self.make()
+        del t["delivery"]
+        t["schema_version"] = 1
+        tasks.save(t)
+        result = tasks.migrate()
+        self.assertIn(t["id"], result["migrated"])
+        migrated = self.reload(t)
+        self.assertEqual(migrated["schema_version"], tasks.SCHEMA_VERSION)
+        self.assertEqual(migrated["delivery"],
+                         {"branch": None, "pr": None, "landed_at": None})
+
+
+class TestDeliveryResolution(Base):
+    """Delivery is derived up the parent chain (DESIGN §10.19, supersedes
+    §10.18): a task either owns a delivery or inherits its nearest owning
+    ancestor's — the readiness pattern (stored own vs derived resolved) applied
+    to delivery. No `via`, no synchronization, no decomposition-time write."""
+
+    def child_of(self, parent, title="child"):
+        r = self.apply(self.reload(parent), {"generated_tasks": [
+            {"title": title, "description": "d", "relation": "child"}]},
+            "human")
+        return tasks.load(r["generated_tasks"][0])
+
+    def set_status(self, task, status):
+        t = self.reload(task)
+        t["status"] = status
+        tasks.save(t)
+        return t
+
+    # --- ownership predicate ---------------------------------------------
+    def test_owns_delivery_predicate(self):
+        t = self.make()
+        self.assertFalse(tasks.owns_delivery(t))   # all-None default
+        self.assertTrue(tasks.owns_delivery(tasks.link(t, branch="b")))
+
+    def test_own_delivery_resolves_to_self(self):
+        t = tasks.link(self.make(), branch="b", pr="#1")
+        r = tasks.resolve_delivery(t)
+        self.assertEqual(r["owner"]["id"], t["id"])
+        self.assertEqual(r["branch"], "b")
+
+    # --- inheritance up the chain ----------------------------------------
+    def test_child_inherits_parent_delivery(self):
+        parent = self.make("SAP Invoice Integration")
+        tasks.link(parent, branch="feature/sap", pr="#343")
+        child = self.child_of(parent)
+        self.assertFalse(tasks.owns_delivery(child))       # owns nothing
+        r = tasks.resolve_delivery(child)
+        self.assertEqual(r["owner"], {"id": parent["id"],
+                                      "title": "SAP Invoice Integration"})
+        self.assertEqual(r["branch"], "feature/sap")
+        self.assertEqual(r["pr"], "#343")
+
+    def test_no_owner_up_chain_resolves_none(self):
+        parent = self.make()
+        child = self.child_of(parent)                      # neither linked
+        self.assertIsNone(tasks.resolve_delivery(child))
+
+    def test_nearest_owning_ancestor_wins(self):
+        epic = self.make("epic")
+        tasks.link(epic, branch="epic-br")
+        feature = self.child_of(epic, "feature")
+        tasks.link(feature, branch="feature-br")
+        sub = self.child_of(feature, "sub")
+        r = tasks.resolve_delivery(sub)
+        self.assertEqual(r["owner"]["id"], feature["id"])  # nearest, not epic
+        self.assertEqual(r["branch"], "feature-br")
+
+    def test_break_out_child_owns_itself(self):
+        parent = self.make()
+        tasks.link(parent, branch="feature/sap")
+        child = tasks.link(self.child_of(parent), branch="own-br")  # break out
+        r = tasks.resolve_delivery(child)
+        self.assertEqual(r["owner"]["id"], child["id"])
+        self.assertEqual(r["branch"], "own-br")
+
+    # --- descendants landing gate ----------------------------------------
+    def test_landing_refused_while_descendant_open(self):
+        parent = self.make()
+        child = self.child_of(parent, "child A")
+        self.set_status(parent, "done")
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            tasks.link(self.reload(parent), landed=True)
+        msg = str(ctx.exception)
+        self.assertIn("not closed", msg)
+        self.assertIn(child["id"], msg)
+
+    def test_blocked_on_human_descendant_blocks_landing(self):
+        # The gate is CLOSED (done/cancelled), not TERMINAL: a parked child is
+        # an open question, so it blocks landing.
+        parent = self.make()
+        child = self.child_of(parent, "child A")
+        self.set_status(child, "blocked_on_human")
+        self.set_status(parent, "done")
+        with self.assertRaises(tasks.TaskforgeError) as ctx:
+            tasks.link(self.reload(parent), landed=True)
+        self.assertIn(child["id"], str(ctx.exception))
+
+    def test_landing_allowed_when_all_descendants_closed(self):
+        parent = self.make()
+        child = self.child_of(parent, "child A")
+        self.set_status(child, "done")
+        self.set_status(parent, "done")
+        parent = tasks.link(self.reload(parent), landed=True)
+        self.assertIsNotNone(parent["delivery"]["landed_at"])
+
+    # --- reopen clears landed (operational, not historical) --------------
+    def test_reopen_clears_landed_keeps_branch_pr(self):
+        t = self.make()
+        self.apply(t, {"artifacts": [
+            {"kind": "specification", "payload": spec_payload()}]}, "refine")
+        self.apply(self.reload(t), {"artifacts": [
+            {"kind": "implementation", "payload": impl_payload()},
+            {"kind": "review", "payload": review_payload("approved")}],
+            "signal": "done"}, "run")
+        t = tasks.link(self.reload(t), branch="feature/x", pr="#9",
+                       landed=True)
+        self.assertIsNotNone(t["delivery"]["landed_at"])
+        t = tasks.reopen(t, "more work")
+        self.assertIsNone(t["delivery"]["landed_at"])      # operational lifted
+        self.assertEqual(t["delivery"]["branch"], "feature/x")  # provenance kept
+        self.assertEqual(t["delivery"]["pr"], "#9")
+        types = [e["type"] for e in t["history"]]
+        self.assertIn("landed", types)                     # history preserved
+        self.assertIn("reopened", types)
+
+    def test_reopened_parent_makes_child_read_not_landed(self):
+        parent = self.make("feature")
+        child = self.child_of(parent, "child A")
+        self.set_status(child, "done")
+        self.set_status(parent, "done")
+        tasks.link(self.reload(parent), branch="feature/x", pr="#9",
+                   landed=True)
+        self.assertIsNotNone(
+            tasks.resolve_delivery(self.reload(child))["landed_at"])
+        tasks.reopen(self.reload(parent), "redo")
+        # child still resolves to the parent (branch/pr kept) but not landed
+        self.assertIsNone(
+            tasks.resolve_delivery(self.reload(child))["landed_at"])
+
+    # --- projections expose the derived fields ---------------------------
+    def cli_json(self, argv):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            tasks.main(argv)
+        return json.loads(buf.getvalue())
+
+    def test_summary_output_exposes_derived_fields_for_inheriting_child(self):
+        parent = self.make("Feature X")
+        tasks.link(parent, branch="feature/x", pr="#7")
+        child = self.child_of(parent)          # owns nothing -> inherits
+        s = self.cli_json(["cancel", child["id"], "--reason", "x"])  # summary
+        self.assertEqual(s["delivery_owner"],
+                         {"id": parent["id"], "title": "Feature X"})
+        self.assertEqual(s["resolved_delivery"],
+                         {"branch": "feature/x", "pr": "#7", "landed_at": None})
+        self.assertEqual(s["delivery"],        # own stays empty
+                         {"branch": None, "pr": None, "landed_at": None})
+
+    def test_snapshot_exposes_derived_delivery(self):
+        parent = self.make("Feature X")
+        tasks.link(parent, branch="feature/x", pr="#7")
+        child = self.child_of(parent)
+        rows = {r["id"]: r for r in self.cli_json(["snapshot"])["tasks"]}
+        self.assertEqual(rows[child["id"]]["delivery_owner"]["id"],
+                         parent["id"])
+        self.assertEqual(rows[child["id"]]["resolved_delivery"]["branch"],
+                         "feature/x")
+        self.assertEqual(rows[parent["id"]]["delivery_owner"]["id"],
+                         parent["id"])          # self-owner
 
 
 class TestCliFileInputs(Base):
