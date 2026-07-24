@@ -363,18 +363,19 @@ def link(task, branch=None, pr=None, landed=False, actor="human"):
         task["delivery"]["pr"] = pr
         record(task, "linked", actor, detail={"pr": pr})
     if landed:
-        if task["status"] != "done":
+        # The landing rule lives once in engine.delivery.landing_status; the
+        # gate consumes it (never re-implements it) and only chooses the
+        # error wording for each way it can fail.
+        from engine.delivery import landing_status
+        st = landing_status(task)
+        if st["requires_done"]:
             raise TaskforgeError(
                 f"cannot mark {task['id']} landed: status is "
                 f"{task['status']!r}, not 'done' — only reviewed-and-accepted "
                 "work can land")
-        from engine.delivery import descendants
-        open_desc = sorted(
-            (d for d in descendants(task["id"]) if d["status"] not in CLOSED),
-            key=lambda d: d["id"])
-        if open_desc:
+        if st["blockers"]:
             listing = "\n".join(f"  - {d['id']} ({d['status']})"
-                                for d in open_desc)
+                                for d in st["blockers"])
             raise TaskforgeError(
                 f"cannot mark {task['id']} as landed.\n\nThe following "
                 f"descendants are not closed (done/cancelled):\n\n{listing}")

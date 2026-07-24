@@ -870,6 +870,36 @@ prose, not synthetic samples, is the test corpus** — which is exactly why the
 renderer's security *and* correctness live in `console/static/md-test.html`
 (browser-verified) rather than in synthetic assertions alone.
 
+### v0.7.0 — §10.20 the Projection API: presentation is a layer, not a client
+
+The engine answers "what is the state, and what are the rules?"; every human
+surface until now re-answered "what does that mean?" independently — the CLI in
+prose, the Console in its own composition, the AI in its reports. That is the
+drift §10.16 warned about, one level up: not a second *writer*, but a second
+*interpreter*. E3 closes it with one shared presentation layer
+(`projections.py`): six pure domain projections (`task`/`feature`/`review`/
+`health`/`digest`/`board`) that compose engine facts into typed, serializable
+shapes. It is the source of truth for *presentation* as the engine is for
+*state*; CLI, Web, and SDK become renderers of the identical contracts.
+
+Three properties make it safe to depend on, and all three are tested: it is
+**read-only** (composes engine reads under the lock, never mutates),
+**deterministic** (same store → byte-identical projection), and **carries no
+business logic** — it filters, groups, joins, and formats, but never re-derives
+a rule the engine enforces. That last constraint is load-bearing and had one
+consequence: **landability** is a rule the engine *enforces* (the `link
+--landed` gate), so for the layer to stay logic-free the rule was extracted
+into `engine.delivery.landing_status`, and the gate and the projection now both
+consume it. A test asserts the projection's `landing` equals the engine's
+verdict byte-for-byte — the layer surfaces the rule, it does not own it.
+
+Framework-agnosticism is a contract, not an aspiration: the projections return
+plain JSON data with no colors, icons, HTML, or transport in them. A client
+maps state → its own visual. That is what lets a future desktop/mobile/IDE/MCP
+client consume the same shapes unchanged, and it is why the Projection API is
+versioned and evolved additively (`docs/PROJECTION_API.md`), mirroring the
+engine's `PUBLIC_API.md` discipline one layer up.
+
 ### v0.6.0 — §10.19 delivery is derived up the parent chain (supersedes §10.18)
 
 §10.18 gave every task its own `delivery: {branch, pr, landed_at}`. First

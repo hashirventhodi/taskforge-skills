@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — the Projection API: a shared presentation layer (v0.7.0, Phase 1)
+- **`taskforge/scripts/projections.py`** — six pure, framework-agnostic domain
+  projections (`task`, `feature`, `review`, `health`, `digest`, `board`) that
+  compose engine facts into typed, JSON-serializable shapes. The single source
+  of truth for *how humans consume* engine state; every renderer (Web UI, CLI,
+  MCP, SDK) consumes the same contracts. Documented as a stable surface in
+  `docs/PROJECTION_API.md`, evolved additively.
+- **Read-only, deterministic, no business logic.** The layer never mutates the
+  store and never re-derives an engine-owned rule — enforced by
+  `test_projections.py` (read-only, determinism, pure-JSON, and a guard that
+  `feature().landing` matches `engine.delivery.landing_status` byte-for-byte).
+- **`engine.delivery.landing_status`** — the landing rule (done + every
+  descendant closed) extracted into one function, now consumed by *both* the
+  `link --landed` gate and the feature projection. The projection surfaces it;
+  it never re-implements it. Behavior-preserving refactor of the existing gate.
+- Screens are compositions of these projections, not new projections — the
+  Dashboard = `board()` + in-flight `feature()` summaries + `health()` summary.
+
 ### Added — git-aware tasks: `done` is not `merged` (v0.6.0)
 - **`link <id> [--branch B] [--pr P] [--landed]`** — records a task's delivery
   provenance: where its work lives (branch, PR) and whether it landed (a merged

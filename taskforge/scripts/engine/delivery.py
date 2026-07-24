@@ -11,7 +11,7 @@ Consumed only by the read model (cli.summary, snapshot) and the landing gate.
 The mutation layer never resolves — it touches a task's own delivery only.
 """
 from engine import store
-from engine.model import owns_delivery, parent_id
+from engine.model import CLOSED, owns_delivery, parent_id
 
 
 def resolve_delivery(task):
@@ -51,3 +51,26 @@ def descendants(task_id):
                 break
             cur = by_id.get(pid) if pid else None
     return out
+
+
+def landing_status(task):
+    """The single definition of the landing rule: can `task`'s delivery be
+    marked landed, and what blocks it?
+
+    Landing asserts the delivery unit is *complete*: the task must be `done`
+    (reviewed and accepted) AND every descendant closed (`done`/`cancelled` —
+    a child still in flight, or parked on an open question, means the merge is
+    premature). This rule is owned here and consumed by BOTH the `link
+    --landed` gate (engine.apply.link) and the feature projection — never
+    re-derived by a client. Cycle-safe via `descendants`.
+
+    Returns `{landable, requires_done, blockers}`: `blockers` is the sorted
+    list of open-descendant task dicts; `requires_done` is True when the task
+    itself is not yet `done`; `landable` is True only when neither holds."""
+    open_desc = sorted(
+        (d for d in descendants(task["id"]) if d["status"] not in CLOSED),
+        key=lambda d: d["id"])
+    requires_done = task["status"] != "done"
+    return {"landable": not requires_done and not open_desc,
+            "requires_done": requires_done,
+            "blockers": open_desc}
