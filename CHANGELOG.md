@@ -4,9 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-07-24
 
-### Added — the Projection API: a shared presentation layer (v0.7.0, Phase 1)
+The **architecture release**: TaskForge gains a clean three-layer separation —
+Engine (state + business rules) → Projection API (presentation semantics) →
+thin adapters (Web UI, CLI, future clients) — proven by two independent clients
+rendering the same projections with zero duplicated logic. It also lands two
+engine-correctness fixes and the git-aware delivery model that motivated the
+work. See `docs/RETROSPECTIVE-v0.6.0.md` and `docs/ARCHITECTURE.md`.
+
+### Added — the Projection API: the shared presentation layer
 - **`taskforge/scripts/projections.py`** — six pure, framework-agnostic domain
   projections (`task`, `feature`, `review`, `health`, `digest`, `board`) that
   compose engine facts into typed, JSON-serializable shapes. The single source
@@ -23,6 +30,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it never re-implements it. Behavior-preserving refactor of the existing gate.
 - Screens are compositions of these projections, not new projections — the
   Dashboard = `board()` + in-flight `feature()` summaries + `health()` summary.
+- **Four domain concepts, one meaning per field** — Structural Integrity,
+  Review Result, Audit Status, Delivery Status. `doctor` findings gained a
+  `kind` so structural integrity never conflates with audit hygiene. Two
+  orthogonalities are enforced and tested: a review can be `approved` yet a
+  `breach`; a missing reviewer prompt is not a graph defect.
+
+### Added — the projection-driven Web UI
+- **Six workflow screens** — Dashboard, Task Focus, Feature, Review, Activity,
+  Health — vanilla JS with no build step, each rendering one projection and
+  nothing more (untrusted text always escaped). Visible Activity time ranges,
+  a deduped next action, keyboard navigation (`d`/`a`/`h`/`?`), relative
+  timestamps, consistent loading/error states, and markdown descriptions.
+  Validated by a real browser walkthrough against "would I enjoy using this
+  daily?".
+- **Becomes the human's primary client**, replacing the snapshot-driven Console
+  UI. Served by the existing Console server as read-only projection endpoints
+  (`/api/p/…`); the whitelisted human-action write surface (`/api/command`) is
+  retained.
+
+### Added — `tf`, the terminal client
+- **A presentation adapter over the same six projections** (`board`, `task`,
+  `feature`, `review`, `activity`, `health`), sharing the Web UI's terminology
+  and semantics. Building it required **zero Projection API changes and no
+  duplicated logic** — the proof that the contract is truly client-agnostic.
+
+### Changed — audit and integrity are distinct domain concepts
+- Split the overloaded `review.audited` boolean and `integrity_ok` flag into
+  **Audit Status** (`verified`/`breach`/`unrecorded`/`none`, identical across
+  task, feature, review, and health) and **Structural Integrity** (graph
+  well-formedness only). Fixed two cross-screen contradictions surfaced by the
+  Web UI; both clients inherited the corrected semantics. The projection
+  contract also drops presentation leaks caught before the v1 freeze: no
+  CLI command string, and the authoritative `readiness` + `terminal` axes
+  instead of the raw engine status cache.
 
 ### Added — git-aware tasks: `done` is not `merged` (v0.6.0)
 - **`link <id> [--branch B] [--pr P] [--landed]`** — records a task's delivery
@@ -106,6 +147,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   not — underscores inside identifiers (`message_queue_consumer`) causing
   spurious italics, and loose ordered lists splitting/renumbering — both
   fixed and pinned by regression cases.
+
+### Removed — the legacy snapshot Console
+- The snapshot-driven Web UI (`console/static/app.js`, `style.css`) and the raw
+  read endpoints only it used (`/api/snapshot`, `/api/task/<id>`) are gone —
+  reads now go exclusively through the Projection API. Its four screen design
+  docs (`docs/console/{home-screen,board-view,task-detail,graph-view}.md`) were
+  removed; `design-principles.md` is kept and updated. The dependency-graph view
+  was not carried into the projection UI; if wanted it returns as a product
+  capability over the `edges` already in the projections, not as legacy code.
+
+### Docs
+- **`docs/ARCHITECTURE.md`** — the canonical three-layer map, with explicit
+  "where does my change go?" guidance so contributors know which layer owns
+  logic. **`docs/PROJECTION_API.md`** — the Projection API contract, frozen v1,
+  additive-only. **`docs/RETROSPECTIVE-v0.6.0.md`** — the engineering
+  retrospective for this release.
 
 ## [0.5.0] - 2026-07-22
 

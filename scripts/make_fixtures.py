@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage fixture stores for Human Console design and testing.
+"""Stage fixture stores for trying and testing the clients (Web UI, CLI).
 
 One store per way the engine can need a human — the park causes — plus a
 quiet store (empty queue) and self-verification: every store is built through

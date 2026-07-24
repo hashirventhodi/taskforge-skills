@@ -84,24 +84,36 @@ Run branch must never sweep it into a feature commit. To track workflow
 history in git instead, delete `.tasks/.gitignore` and commit the store from
 the trunk line only. Settings in `.tasks/config.json`; env vars win.
 
-## The Human Console
+## Human interfaces — the Web UI and CLI
 
-The Console is the *human actor's* native seat, as the CLI + skills are the
-AI's — two peer clients of the same engine:
+Humans consume engine state through the **Projection API**
+([`docs/PROJECTION_API.md`](docs/PROJECTION_API.md)), a read-only presentation
+layer; the Web UI and the `tf` CLI are two thin adapters that render the same
+projections. Engine owns state and rules, the Projection API owns presentation
+semantics, adapters render only — see
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+**Web UI** — six workflow screens (Dashboard, Task Focus, Feature, Review,
+Activity, Health):
 
 ```bash
 python3 console/server.py            # http://127.0.0.1:7373 over ./.tasks
 python3 console/server.py --dir path/to/.tasks --port 7373
 ```
 
-Home is the queue of everything that needs a human — approvals (explore's
-topology proposals and research dispositions), questions, and stalled work
-(budget/breaker/cycle parks) — plus a task workspace, a dependency graph, and
-a read-only board. Every button is an existing engine command; the server
-adds no behavior (no second writer, no re-derived state, loopback-only).
-Design records live in [`docs/console/`](docs/console/design-principles.md);
-fixture stores for every screen state come from
-`python3 scripts/make_fixtures.py <dir>`.
+**CLI** — the terminal equivalent, sharing the same terminology:
+
+```bash
+python3 taskforge/scripts/tf.py board             # what needs you, what's next
+python3 taskforge/scripts/tf.py task TASK-x       # spec, review, delivery, blockers
+python3 taskforge/scripts/tf.py health            # structural · audit · delivery
+python3 taskforge/scripts/tf.py activity --range 7d
+```
+
+Both are pure renderers with no business logic; every write is an existing
+engine command (the server adds no behavior — no second writer, no re-derived
+state, loopback-only). `python3 scripts/make_fixtures.py <dir>` stages demo
+stores in known engine states for trying the clients.
 
 ## Division of labor
 

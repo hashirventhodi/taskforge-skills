@@ -195,7 +195,7 @@ def main():
     if args.dir:
         os.environ["TASKFORGE_DIR"] = args.dir
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"Human Console: http://127.0.0.1:{args.port}  "
+    print(f"TaskForge Web UI: http://127.0.0.1:{args.port}  "
           f"(store: {os.environ.get('TASKFORGE_DIR', '.tasks')})")
     try:
         srv.serve_forever()
